@@ -454,6 +454,100 @@ document.getElementById("nextpass").onclick = ()=>{
   if(!confirm("确认本遍结束，进入第 " + (st.pass+1) + " 遍？\n下一遍要完成前 " + (100*(st.pass+1)) + " 题。")) return;
   st.pass++; st.done = {}; clearSess(); save(); renderHome();
 };
+/* ---------- 换设备：只搬「能接着做题」的核心进度 ----------
+ * 传：遍数、做过哪些题、待重做、模式与时长设置（可选错题记录）
+ * 不传：活跃地图 history、首答记录 q、今日计数 today、会话快照 sess、音效 pace
+ * 实测（每档做 300 题）：核心 1.0 KB、含错题 1.9 KB；完整包 8.9 KB */
+function makePortable(withWrong){
+  const o = {v:3, kind:"portable", at:Date.now(), lv:S.lv, mode:S.mode,
+             dailyMode:S.dailyMode, dailyCount:S.dailyCount, dailyMin:S.dailyMin,
+             st:S.st, retry:S.retry};
+  if(withWrong) o.wrong = S.wrong;
+  return JSON.stringify(o);
+}
+function applyPortable(o){
+  if(!o || o.kind !== "portable") throw new Error("不是进度码");
+  S.lv = Math.max(0, Math.min(DATA.length-1, +o.lv || 0));
+  S.mode = o.mode === "compact" ? "compact" : "strict";
+  S.dailyMode = o.dailyMode || "time";
+  S.dailyCount = +o.dailyCount || DAILY;
+  S.dailyMin = +o.dailyMin || 10;
+  S.st = o.st || {};
+  S.retry = o.retry || {};
+  if(o.wrong) S.wrong = o.wrong;
+  S.sess = null;                 // 旧会话快照作废，避免和搬来的进度打架
+  save();
+}
+async function encodeCode(str){
+  const bytes = new TextEncoder().encode(str);
+  let out = bytes, tag = "P";
+  if(typeof CompressionStream !== "undefined"){
+    try{
+      const cs = new CompressionStream("gzip");
+      const b = await new Response(new Blob([bytes]).stream().pipeThrough(cs)).blob();
+      out = new Uint8Array(await b.arrayBuffer());
+      tag = "G";
+    }catch(e){}
+  }
+  let s = "";
+  for(let i=0;i<out.length;i++) s += String.fromCharCode(out[i]);
+  return "GQ1" + tag + ":" + btoa(s);
+}
+async function decodeCode(code){
+  code = String(code || "").trim().replace(/\s+/g, "");
+  const m = /^GQ1([GP]):(.+)$/.exec(code);
+  if(!m) throw new Error("格式不对，是不是没复制全？");
+  const bin = atob(m[2]);
+  let bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  if(m[1] === "G"){
+    const ds = new DecompressionStream("gzip");
+    const b = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).blob();
+    return await b.text();
+  }
+  return new TextDecoder().decode(bytes);
+}
+/** 调试与测试用：把编解码挂到 window */
+window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode };
+
+document.getElementById("mkCode").onclick = async ()=>{
+  const hint = document.getElementById("codeHint");
+  try{
+    const code = await encodeCode(makePortable(document.getElementById("withWrong").checked));
+    const box = document.getElementById("codeBox");
+    box.value = code; box.classList.remove("hide");
+    document.getElementById("doImport").classList.add("hide");
+    hint.textContent = "已生成 " + code.length + " 个字符，发到微信再在另一台粘贴";
+    try{ await navigator.clipboard.writeText(code); hint.textContent += "（已复制）"; }
+    catch(e){ box.focus(); box.select(); hint.textContent += "（请手动全选复制）"; }
+  }catch(e){ hint.textContent = "生成失败：" + (e.message || e); }
+};
+document.getElementById("useCode").onclick = async ()=>{
+  const box = document.getElementById("codeBox");
+  box.value = ""; box.classList.remove("hide");
+  document.getElementById("doImport").classList.remove("hide");
+  document.getElementById("codeHint").textContent = "把另一台的进度码粘到上面，再点「确认导入」";
+  try{
+    const t = await navigator.clipboard.readText();
+    if(t && /^GQ1/.test(t.trim())) box.value = t.trim();
+  }catch(e){}
+  box.focus();
+};
+document.getElementById("doImport").onclick = async ()=>{
+  const hint = document.getElementById("codeHint");
+  try{
+    const o = JSON.parse(await decodeCode(document.getElementById("codeBox").value));
+    if(!o || o.kind !== "portable") throw new Error("这不是进度码");
+    const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
+    const pass = ((o.st || {})[o.lv] || {}).pass || 1;
+    if(!confirm("导入会把「" + pname(PID) + "」的进度替换成：" + lb + " · 第 " + pass + " 遍。\n活跃地图和首答记录保留本机的。确定吗？")) return;
+    applyPortable(o); renderHome();
+    hint.textContent = "已导入：" + lb + " · 第 " + pass + " 遍";
+  }catch(e){
+    hint.textContent = "导入失败：" + (e.message || "进度码无效");
+  }
+};
+
 document.getElementById("export").onclick = ()=>{
   const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);

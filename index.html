@@ -89,9 +89,18 @@
       </span></div>
     <div class="hint">iPad 侧边静音键打开时不会响</div>
     <div class="row" style="margin-top:10px"><span>错题记录</span><span id="wcount">0 道</span></div>
-    <button class="btn ghost" id="export">导出进度 JSON</button>
-    <button class="btn ghost" id="import">导入进度 JSON（恢复备份）</button>
+    <button class="btn ghost" id="export">导出完整备份（JSON 文件）</button>
+    <button class="btn ghost" id="import">导入完整备份（JSON 文件）</button>
     <input type="file" id="impfile" accept=".json,application/json" class="hide">
+
+    <div class="row" style="margin-top:14px"><span>换设备 · 只搬进度</span></div>
+    <button class="btn ghost" id="mkCode">生成进度码（复制后发到另一台）</button>
+    <button class="btn ghost" id="useCode">粘贴进度码导入</button>
+    <textarea id="codeBox" class="codeBox hide" rows="4" spellcheck="false"
+              autocomplete="off" placeholder="把另一台生成的进度码粘贴到这里"></textarea>
+    <button class="btn hide" id="doImport">确认导入</button>
+    <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会长一倍）</label>
+    <div class="hint" id="codeHint">进度码只含遍数、做过哪些题、待重做题；不含活跃地图和首答记录</div>
   </div>
 </div>
 
@@ -118,7 +127,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">9ee08624c166</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">7f21e98cde76</span></div>
 </div>
 
 <!--PWA-UPDATE-->
