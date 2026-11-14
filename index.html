@@ -93,8 +93,8 @@
     <div class="row" style="margin-top:14px"><span>备份 · 换设备</span></div>
     <button class="btn ghost" id="mkCode">显示本机进度二维码</button>
     <button class="btn ghost" id="scanCode">扫码导入（用这台设备的相机）</button>
-    <button class="btn ghost" id="albumCode">从相册选二维码图片</button>
-    <input type="file" id="qrFile" accept="image/*" class="hide">
+    <label class="btn ghost fileBtn" for="qrFile">从相册选二维码图片</label>
+    <input type="file" id="qrFile" accept="image/*" class="fileInput">
     <div class="qrBox hide" id="qrBox"></div>
     <div class="qrHint hide" id="qrHint">用另一台设备打开本页 → 点「扫码导入」对准这个码</div>
     <div class="scanWrap hide" id="scanWrap">
@@ -139,7 +139,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">f1088f91bfa7</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">68804d44603e</span></div>
 </div>
 
 <!--PWA-UPDATE-->

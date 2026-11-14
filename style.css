@@ -47,6 +47,10 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
 .types{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
 .types button{border:1px solid #d8c9ae;background:#fff;border-radius:8px;padding:9px 4px;font-size:12px;font-family:inherit}
 .hide{display:none!important}
+/* 文件选择框：视觉隐藏但保留在布局流程里（display:none 在部分安卓 WebView 里会让选择器打不开） */
+.fileInput{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);border:0;padding:0;margin:0}
+.fileBtn{text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .foot{font-size:11px;color:#9a8b78;text-align:center;margin:18px 0}
 select{font-family:inherit;font-size:14px;padding:6px 10px;border:1px solid #d8c9ae;border-radius:8px;background:#fff;color:#5d4f3f}
 .seg{display:inline-flex}

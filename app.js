@@ -907,9 +907,6 @@ function decodeFromImage(file){
     img.src = url;
   });
 }
-document.getElementById("albumCode").onclick = ()=>{
-  document.getElementById("qrFile").click();
-};
 document.getElementById("qrFile").onchange = async (e)=>{
   const hint = document.getElementById("codeHint");
   const f = e.target.files && e.target.files[0];
