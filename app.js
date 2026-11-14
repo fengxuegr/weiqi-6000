@@ -313,14 +313,32 @@ function renderHome(){
   const list = planList(S.lv).filter(k=>!st.done[k]);
   const doneN = Object.keys(st.done).length;
 
-  // 环形 = 今天累计做题时长 / 5 分钟（老师给的下限）。做够 5 分钟就满，继续做到 15 分钟更好
+  // 环形 = 「今天」目标的完成度，跟着「按什么停」走：
+  //   count 模式按题数、time 模式按分钟、free 模式只报已做量。
+  //   （旧版固定用 300 秒，与 count 模式对不上；达标后环也不动，失去反馈作用）
   const todaySec = S.today.sec || 0;
-  const pct = Math.min(100, Math.round(todaySec / 300 * 100));
+  const todayN = S.today.n || 0;
+  let ringPct = 0, ringBig = "", ringSub = "今天";
+  if (S.dailyMode === "count") {
+    const gN = Math.max(1, +S.dailyCount || DAILY);
+    ringPct = Math.min(100, todayN / gN * 100);
+    ringBig = todayN + "/" + gN;
+    ringSub = "今日题数";
+  } else if (S.dailyMode === "time") {
+    const gM = Math.max(1, +S.dailyMin || 10);
+    ringPct = Math.min(100, (todaySec / 60) / gM * 100);
+    ringBig = todaySec < 60 ? todaySec + " 秒" : Math.round(todaySec / 60) + " 分";
+    ringSub = "今日 / " + gM + " 分";
+  } else {
+    ringPct = Math.min(100, todayN / DAILY * 100);
+    ringBig = todayN + " 题";
+    ringSub = "今日";
+  }
   const C = 2 * Math.PI * 42;
   const fg = document.getElementById("ringfg");
-  fg.setAttribute("stroke-dasharray", (C*pct/100).toFixed(1) + " " + C.toFixed(1));
-  document.getElementById("ringpct").textContent =
-      todaySec < 60 ? (todaySec + " 秒") : (Math.round(todaySec/60) + " 分");
+  fg.setAttribute("stroke-dasharray", (C*ringPct/100).toFixed(1) + " " + C.toFixed(1));
+  document.getElementById("ringpct").textContent = ringBig;
+  document.getElementById("ringsub").textContent = ringSub;
   document.getElementById("ptoday").textContent =
       (todaySec < 60 ? Math.round(todaySec) + " 秒" : Math.round(todaySec/60) + " 分钟") +
       " · " + S.today.n + " 题";
@@ -391,8 +409,6 @@ function renderCalendar(){
   document.getElementById("monthstat").textContent = `${monthQ} 题 · ${monthD} 天有做题`;
   const s = calcStreak();
   document.getElementById("streak").textContent = `连续 ${s} 天`;
-  document.getElementById("msfill").style.width = Math.min(100, s/28*100).toFixed(1) + "%";
-  document.querySelectorAll(".msline b").forEach(b => b.classList.toggle("on", s >= +b.dataset.d));
 }
 function syncSfx(){
   const on = !S.sfx || S.sfx.on !== false;

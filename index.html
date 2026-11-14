@@ -20,7 +20,7 @@
 
 <div id="home">
   <h1>围棋级位测试6000题</h1>
-  <div class="sub">6124 题 · 逢百重来十轮推进（每轮 100 题起，逐轮加 100）｜每天 5–15 分钟｜进度自动保存</div>
+  <div class="sub">6124 题 · 每天 5–15 分钟 · 进度自动保存<br>每轮 100 题起，逐轮加 100，共 10 轮</div>
 
   <div class="who">
     <span class="wholab">练习档案</span>
@@ -43,7 +43,7 @@
         <circle cx="50" cy="50" r="42" class="ringbg"/>
         <circle id="ringfg" cx="50" cy="50" r="42" class="ringfg"/>
         <text id="ringpct" x="50" y="46" class="rt1">0 题</text>
-        <text x="50" y="63" class="rt2">今天</text>
+        <text id="ringsub" x="50" y="63" class="rt2">今天</text>
       </svg>
       <div class="proginfo">
         <div class="row"><span>第 <b id="ppass">1</b> / 10 轮</span><span id="pinfo">—</span></div>
@@ -62,17 +62,16 @@
   <div class="card">
     <h2>3 本月活跃地图</h2>
     <div class="row"><span>当前连续做题</span><span id="streak">连续 0 天</span></div>
-    <div class="msline"><i id="msfill"></i><b data-d="7" style="left:25%"></b><b data-d="14" style="left:50%"></b><b data-d="28" style="left:100%"></b></div>
-    <div class="mslabels"><span>7 天</span><span>14 天</span><span>28 天</span></div>
+    <div class="calhead"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
     <div class="cal" id="cal"></div>
     <div class="legend">
       <span>未做</span><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i><span>多做</span>
     </div>
-    <div class="row" style="margin-top:10px"><span>本月累计</span><span id="monthstat">—</span></div>
+    <div class="row" style="margin-top:12px"><span>本月累计</span><span id="monthstat">—</span></div>
   </div>
 
   <div class="card">
-    <h2>4 每日节奏与设置</h2>
+    <h2>4 每日节奏</h2>
     <div class="row"><span>今天按什么停</span>
       <span class="seg"><button id="mFree">自由</button><button id="mCount" class="on">固定题数</button><button id="mTime">固定时间</button></span></div>
     <div class="row" id="rowCount"><span>每天题数</span>
@@ -82,37 +81,47 @@
     <div class="row" id="rowTime"><span>每次时长（分钟）</span>
       <span><select id="selMin"><option>5</option><option>8</option><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option><option>45</option><option>60</option></select></span></div>
     <div class="hint">老师建议每天 5–15 分钟，到点前想停随时点「返回」</div>
-    <div class="row" style="margin-top:10px"><span>音效</span>
+    <div class="row" style="margin-top:12px"><span>音效</span>
       <span class="inline"><button class="chip on" id="sfxBtn">开</button>
         <input id="sfxVol" type="range" min="0" max="100" step="5" value="45" title="音量">
       </span></div>
     <div class="hint">iPad 侧边静音键打开时不会响</div>
-    <div class="row" style="margin-top:10px"><span>错题集</span>
+    <div class="row" style="margin-top:12px"><span>错题集</span>
       <button class="chip" id="wrongBtn">0 道</button></div>
     <div class="wrongList hide" id="wrongList"></div>
-    <div class="row" style="margin-top:14px"><span>备份 · 换设备</span></div>
-    <button class="btn ghost" id="mkCode">显示本机进度二维码</button>
-    <button class="btn ghost" id="scanCode">扫码导入（用这台设备的相机）</button>
-    <label class="btn ghost fileBtn" for="qrFile">从相册选二维码图片</label>
-    <input type="file" id="qrFile" accept="image/*" class="fileInput">
-    <div class="qrBox hide" id="qrBox"></div>
-    <div class="qrHint hide" id="qrHint">用另一台设备打开本页 → 点「扫码导入」对准这个码</div>
-    <div class="scanWrap hide" id="scanWrap">
-      <video id="scanVideo" autoplay playsinline muted></video>
-      <div class="scanTip" id="scanTip">把另一台设备上的二维码放进画面里</div>
-      <button class="btn ghost" id="scanCancel">取消</button>
-    </div>
-    <canvas id="scanCanvas" class="hide"></canvas>
-    <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会稍长一点）</label>
-    <div class="hint">从桌面图标打开若相机/相册无反应，可改用 Chrome 打开同一网址操作</div>
-    <div class="hint" id="codeHint">进度只存在本机，建议每月生成一次留底。码里含轮数、做过哪些题、待重做题；不含活跃地图和首答记录</div>
 
-    <div class="row" style="margin-top:14px"><span>手动设置进度</span></div>
-    <div class="row"><span>级别</span><span><select id="mLevel"></select></span></div>
-    <div class="row"><span>第几轮</span><span><input id="mPass" type="number" min="1" max="10" step="1" value="1"></span></div>
-    <div class="row"><span>已做到第几题</span><span><input id="mDone" type="number" min="0" max="1000" step="1" value="0"></span></div>
-    <button class="btn ghost" id="mApply">应用（覆盖该档的完成记录）</button>
-    <div class="hint" id="mHint">坑：只填「已做到第几题」时，前面那些题都会算作已完成</div>
+    <details class="fold">
+      <summary>备份 · 换设备</summary>
+      <div class="foldbody">
+        <p class="hint" style="margin-top:0">进度只存在本机，建议每月生成一次留底</p>
+        <button class="btn quiet" id="mkCode">显示本机进度二维码</button>
+        <button class="btn quiet" id="scanCode">扫码导入（用这台设备的相机）</button>
+        <label class="btn quiet fileBtn" for="qrFile">从相册选二维码图片</label>
+        <input type="file" id="qrFile" accept="image/*" class="fileInput">
+        <div class="qrBox hide" id="qrBox"></div>
+        <div class="qrHint hide" id="qrHint">用另一台设备打开本页 → 点「扫码导入」对准这个码</div>
+        <div class="scanWrap hide" id="scanWrap">
+          <video id="scanVideo" autoplay playsinline muted></video>
+          <div class="scanTip" id="scanTip">把另一台设备上的二维码放进画面里</div>
+          <button class="btn ghost" id="scanCancel">取消</button>
+        </div>
+        <canvas id="scanCanvas" class="hide"></canvas>
+        <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会稍长一点）</label>
+        <div class="hint">从桌面图标打开若相机/相册无反应，可改用 Chrome 打开同一网址操作</div>
+        <div class="hint" id="codeHint">码里含轮数、做过哪些题、待重做题；不含活跃地图和首答记录</div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary>手动设置进度</summary>
+      <div class="foldbody">
+        <div class="row"><span>级别</span><span><select id="mLevel"></select></span></div>
+        <div class="row"><span>第几轮</span><span><input id="mPass" type="number" min="1" max="10" step="1" value="1"></span></div>
+        <div class="row"><span>已做到第几题</span><span><input id="mDone" type="number" min="0" max="1000" step="1" value="0"></span></div>
+        <button class="btn ghost" id="mApply">应用（覆盖该档的完成记录）</button>
+        <div class="hint" id="mHint">注意：只填「已做到第几题」时，前面那些题都会算作已完成</div>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -140,7 +149,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">9703442b2373</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">103b29105947</span></div>
 </div>
 
 <!--PWA-UPDATE-->
