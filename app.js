@@ -488,8 +488,9 @@ document.getElementById("nextpass").onclick = ()=>{
   st.pass++; st.done = {}; clearSess(); save(); renderHome();
 };
 /* ---------- 换设备：只搬「能接着做题」的核心进度 ----------
- * 传：轮数、做过哪些题、待重做、模式与时长设置（可选错题记录）
+ * 传：档案名、轮数、做过哪些题、待重做、模式与时长设置（可选错题记录）
  * 不传：活跃地图 history、首答记录 q、今日计数 today、会话快照 sess、音效 pace
+ * 档案名只占十几个字节，但换设备时省掉一次手动改名，也避免多个孩子串档。
  * 实测（每档做 300 题）：核心 1.0 KB、含错题 1.9 KB；完整包 8.9 KB */
 /* 紧凑编码：done 通常是「0..N 连成一片」，存 1000 个键太浪费。
  * 改成 [轮数, 前沿, 缺口列表]；若缺口比题目还多（极端稀疏），用 [轮数, -1, 题号列表]。
@@ -539,8 +540,22 @@ function unpackIdx(o){
   });
   return out;
 }
+/** 名字来自另一台设备的二维码，按不可信输入处理：去控制字符、限长 16 字 */
+function cleanName(s){
+  return Array.from(String(s || "").replace(/[<>]/g, "").replace(/\s+/g, " "))
+              .slice(0, 16).join("").trim();
+}
+/** 本机当前档是不是「刚装好、还没动过」？只有这种档才允许被导入时直接改名 */
+function blankProfile(){
+  if(!/^(孩子 \d+|1 号)$/.test(pname(PID))) return false;
+  if(S.sess) return false;
+  if(S.today && ((S.today.n || 0) || (S.today.sec || 0))) return false;
+  const st = S.st || {};
+  return !Object.keys(st).some(k => Object.keys((st[k] || {}).done || {}).length);
+}
 function makePortable(withWrong){
-  const o = {v:3, kind:"portable", at:Date.now(), lv:S.lv, mode:S.mode,
+  const o = {v:3, kind:"portable", at:Date.now(), nm:cleanName(pname(PID)),
+             lv:S.lv, mode:S.mode,
              dailyMode:S.dailyMode, dailyCount:S.dailyCount, dailyMin:S.dailyMin,
              st:packSt(), retry:packIdx(S.retry)};
   if(withWrong){
@@ -644,7 +659,8 @@ async function handleIncomingHash(){
 }
 
 /** 调试与测试用：把编解码挂到 window */
-window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode, startCustom, startCountdown, addFiveMinutes };
+window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode, importFromCode,
+                  startCustom, startCountdown, addFiveMinutes };
 
 /* ---------- 错题集 ---------- */
 function renderWrong(){
@@ -740,10 +756,30 @@ async function importFromCode(code){
   const o = JSON.parse(await decodeCode(code));
   if(!o || o.kind !== "portable") throw new Error("这不是进度码");
   const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
-  const pass = ((o.st || {})[o.lv] || {}).pass || 1;
-  if(!confirm("导入会把「" + pname(PID) + "」的进度替换成：" + lb + " · 第 " + pass + " 轮。\n活跃地图和首答记录保留本机的。确定吗？")) return false;
+  const raw = (o.st || {})[o.lv];
+  const pass = Array.isArray(raw) ? (raw[0] || 1) : ((raw && raw.pass) || 1);
+  const src = cleanName(o.nm);              // 老进度码没带名字，就只导进度、不动名字
+  const arr = profiles();
+  const same = src ? arr.find(p => p.name === src) : null;
+  let targetId = PID, renameTo = "", where;
+
+  if(same && same.id !== PID){
+    // 新机上已经给这个孩子建好档了：进度应该落到那一档，而不是覆盖当前别的孩子
+    targetId = same.id;
+    where = "本机已有「" + src + "」这一档，会存进去（替换它原来的进度）";
+  } else if(src && !same && blankProfile()){
+    where = "会把当前这一档改名为「" + src + "」";
+    renameTo = src;
+  } else {
+    where = "会替换「" + pname(PID) + "」这一档的进度，档案名不变";
+  }
+  const msg = "来自「" + (src || "另一台设备") + "」：" + lb + " · 第 " + pass + " 轮。\n" +
+              where + "。\n活跃地图和首答记录保留本机的，确定吗？";
+  if(!confirm(msg)) return false;
+  if(targetId !== PID) switchProfile(targetId);
+  if(renameTo) renameProfile(PID, renameTo);
   applyPortable(o); renderHome();
-  return lb + " · 第 " + pass + " 轮";
+  return "「" + pname(PID) + "」 · " + lb + " · 第 " + pass + " 轮";
 }
 
 document.getElementById("mkCode").onclick = async ()=>{
@@ -751,7 +787,8 @@ document.getElementById("mkCode").onclick = async ()=>{
   try{
     const code = await encodeCode(makePortable(document.getElementById("withWrong").checked));
     showQr(code);
-    hint.textContent = "二维码已生成（" + code.length + " 个字符）——用另一台设备点「扫码导入」对准它";
+    hint.textContent = "已生成「" + pname(PID) + "」的进度二维码（" + code.length +
+                       " 个字符）——用另一台设备点「扫码导入」对准它";
   }catch(e){ hint.textContent = "生成失败：" + (e.message || e); }
 };
 
