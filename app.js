@@ -548,32 +548,6 @@ document.getElementById("doImport").onclick = async ()=>{
   }
 };
 
-document.getElementById("export").onclick = ()=>{
-  const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = "gotest_" + pname(PID).replace(/[\\/:*?"<>|\s]+/g, "_") + "_" + today() + ".json"; a.click();
-};
-document.getElementById("import").onclick = ()=> document.getElementById("impfile").click();
-document.getElementById("impfile").onchange = (e)=>{
-  const f = e.target.files[0]; if(!f) return;
-  const rd = new FileReader();
-  rd.onload = ()=>{
-    try{
-      const o = JSON.parse(rd.result);
-      if(!o || !o.st) throw new Error("bad");
-      if(!confirm("导入会覆盖「" + pname(PID) + "」当前的进度，确定吗？")) { e.target.value=""; return; }
-      o.v = 3; o.dailyMode = o.dailyMode || "time";
-      o.dailyCount = o.dailyCount || DAILY; o.dailyMin = o.dailyMin || 15;
-      o.history = o.history || {}; o.q = o.q || {}; o.retry = o.retry || {};
-      o.pace = o.pace || DAILY;
-      S = o; save(); renderHome();
-      alert("进度已恢复");
-    }catch(err){ alert("导入失败：不是有效的进度文件"); }
-    e.target.value = "";
-  };
-  rd.readAsText(f, "utf-8");
-};
-
 /* ---------- 做题 ---------- */
 let queue = [], cur = null, cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
 let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
