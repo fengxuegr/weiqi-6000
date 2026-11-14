@@ -581,14 +581,8 @@ async function handleIncomingHash(){
     const mm = /^(GQ1[GP]:)([A-Za-z0-9\-_]+)$/.exec(hit[1]);
     let body = mm[2].replace(/-/g, "+").replace(/_/g, "/");
     while(body.length % 4) body += "=";
-    const o = JSON.parse(await decodeCode(mm[1] + body));
-    if(!o || o.kind !== "portable") throw new Error("这不是进度码");
-    const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
-    const pass = ((o.st || {})[o.lv] || {}).pass || 1;
-    if(confirm("扫到另一台的进度：" + lb + " · 第 " + pass + " 轮。\n导入到「" + pname(PID) + "」并替换现有进度？")){
-      applyPortable(o); renderHome();
-      alert("已导入：" + lb + " · 第 " + pass + " 轮");
-    }
+    const msg = await importFromCode(mm[1] + body);
+    if(msg) alert("已导入：" + msg);
   }catch(e){
     alert("进度码无效：" + (e.message || e));
   }finally{
@@ -689,45 +683,103 @@ document.getElementById("mApply").onclick = ()=>{
   document.getElementById("mHint").textContent = "已设为：" + DATA[lv].lb + " · 第 " + pass + " 轮 · 已完成 " + k + " 题";
 };
 
+/** 统一的导入入口：进度码字符串 → 校验 → 确认 → 落地 */
+async function importFromCode(code){
+  const o = JSON.parse(await decodeCode(code));
+  if(!o || o.kind !== "portable") throw new Error("这不是进度码");
+  const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
+  const pass = ((o.st || {})[o.lv] || {}).pass || 1;
+  if(!confirm("导入会把「" + pname(PID) + "」的进度替换成：" + lb + " · 第 " + pass + " 轮。\n活跃地图和首答记录保留本机的。确定吗？")) return false;
+  applyPortable(o); renderHome();
+  return lb + " · 第 " + pass + " 轮";
+}
+
 document.getElementById("mkCode").onclick = async ()=>{
   const hint = document.getElementById("codeHint");
   try{
     const code = await encodeCode(makePortable(document.getElementById("withWrong").checked));
-    const box = document.getElementById("codeBox");
-    box.value = code; box.classList.remove("hide");
-    document.getElementById("doImport").classList.add("hide");
     showQr(code);
-    hint.textContent = "已生成 " + code.length + " 个字符；可扫码，也可复制下面的码发到另一台";
-    try{ await navigator.clipboard.writeText(code); hint.textContent += "（已复制）"; }
-    catch(e){ box.focus(); box.select(); hint.textContent += "（请手动全选复制）"; }
+    hint.textContent = "二维码已生成（" + code.length + " 个字符）——用另一台设备点「扫码导入」对准它";
   }catch(e){ hint.textContent = "生成失败：" + (e.message || e); }
 };
-document.getElementById("useCode").onclick = async ()=>{
-  const box = document.getElementById("codeBox");
-  box.value = ""; box.classList.remove("hide");
+
+/* ---------- 扫码导入（设备自带摄像头 + jsQR 解码） ---------- */
+let scanStream = null, scanRAF = 0;
+function stopScan(){
+  if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF = 0; }
+  if(scanStream){ scanStream.getTracks().forEach(t=>{ try{ t.stop(); }catch(e){} }); scanStream = null; }
+  const v = document.getElementById("scanVideo");
+  if(v) v.srcObject = null;
+  document.getElementById("scanWrap").classList.add("hide");
   document.getElementById("qrBox").classList.add("hide");
   document.getElementById("qrHint").classList.add("hide");
-  document.getElementById("doImport").classList.remove("hide");
-  document.getElementById("codeHint").textContent = "把另一台的进度码粘到上面，再点「确认导入」";
-  try{
-    const t = await navigator.clipboard.readText();
-    if(t && /^GQ1/.test(t.trim())) box.value = t.trim();
-  }catch(e){}
-  box.focus();
-};
-document.getElementById("doImport").onclick = async ()=>{
-  const hint = document.getElementById("codeHint");
-  try{
-    const o = JSON.parse(await decodeCode(document.getElementById("codeBox").value));
-    if(!o || o.kind !== "portable") throw new Error("这不是进度码");
-    const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
-    const pass = ((o.st || {})[o.lv] || {}).pass || 1;
-    if(!confirm("导入会把「" + pname(PID) + "」的进度替换成：" + lb + " · 第 " + pass + " 轮。\n活跃地图和首答记录保留本机的。确定吗？")) return;
-    applyPortable(o); renderHome();
-    hint.textContent = "已导入：" + lb + " · 第 " + pass + " 轮";
-  }catch(e){
-    hint.textContent = "导入失败：" + (e.message || "进度码无效");
+}
+/** 扫码结果可能是整段网址，也可能就是码本身 */
+function pickCode(text){
+  const m = /#p=(GQ1[GP]:[A-Za-z0-9\-_]+)/.exec(text || "");
+  const raw = m ? m[1] : String(text || "").trim();
+  const mm = /^(GQ1[GP]:)([A-Za-z0-9\-_]+)$/.exec(raw);
+  if(!mm) return null;
+  let body = mm[2].replace(/-/g, "+").replace(/_/g, "/");
+  while(body.length % 4) body += "=";
+  return mm[1] + body;
+}
+function scanLoop(){
+  const v = document.getElementById("scanVideo");
+  const cv = document.getElementById("scanCanvas");
+  if(!scanStream || !v || !cv) return;
+  if(v.readyState === v.HAVE_ENOUGH_DATA && v.videoWidth){
+    const w = v.videoWidth, h = v.videoHeight;
+    const scale = Math.min(1, 640 / Math.max(w, h));
+    cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+    const g = cv.getContext("2d");
+    g.drawImage(v, 0, 0, cv.width, cv.height);
+    const img = g.getImageData(0, 0, cv.width, cv.height);
+    const res = jsQR(img.data, cv.width, cv.height, { inversionAttempts: "dontInvert" });
+    if(res && res.data){
+      const code = pickCode(res.data);
+      stopScan();
+      if(!code){ alert("扫到的不是进度码"); return; }
+      importFromCode(code).then(msg=>{ if(msg) alert("已导入：" + msg); })
+                          .catch(e=>alert("进度码无效：" + (e.message || e)));
+      return;
+    }
   }
+  scanRAF = requestAnimationFrame(scanLoop);
+}
+document.getElementById("scanCode").onclick = async ()=>{
+  const hint = document.getElementById("codeHint");
+  if(typeof jsQR !== "function"){
+    hint.textContent = "扫码需要网页版（https）打开；本地文件版请改用二维码 + 系统相机";
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    hint.textContent = "这个浏览器不支持调用摄像头";
+    return;
+  }
+  document.getElementById("qrBox").classList.add("hide");
+  document.getElementById("qrHint").classList.add("hide");
+  document.getElementById("scanWrap").classList.remove("hide");
+  hint.textContent = "正在打开摄像头…";
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }, audio: false
+    });
+    const v = document.getElementById("scanVideo");
+    v.srcObject = scanStream;
+    await v.play();
+    hint.textContent = "对准另一台设备上的二维码";
+    scanLoop();
+  }catch(e){
+    stopScan();
+    hint.textContent = "打不开摄像头：" +
+      (e && e.name === "NotAllowedError" ? "权限被拒绝，请在设置里允许相机后重试"
+       : (e && e.name === "NotFoundError" ? "这台设备没有可用摄像头" : (e.message || e)));
+  }
+};
+document.getElementById("scanCancel").onclick = ()=>{
+  stopScan();
+  document.getElementById("codeHint").textContent = "已取消扫码";
 };
 
 /* ---------- 做题 ---------- */

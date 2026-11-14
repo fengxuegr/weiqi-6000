@@ -91,13 +91,16 @@
       <button class="chip" id="wrongBtn">0 道</button></div>
     <div class="wrongList hide" id="wrongList"></div>
     <div class="row" style="margin-top:14px"><span>备份 · 换设备</span></div>
-    <button class="btn ghost" id="mkCode">生成进度码（复制后发到另一台）</button>
-    <button class="btn ghost" id="useCode">粘贴进度码导入</button>
+    <button class="btn ghost" id="mkCode">显示本机进度二维码</button>
+    <button class="btn ghost" id="scanCode">扫码导入（用这台设备的相机）</button>
     <div class="qrBox hide" id="qrBox"></div>
-    <div class="qrHint hide" id="qrHint">用另一台设备的相机 / 微信扫这个码，打开后点「导入」</div>
-    <textarea id="codeBox" class="codeBox hide" rows="4" spellcheck="false"
-              autocomplete="off" placeholder="把另一台生成的进度码粘贴到这里"></textarea>
-    <button class="btn hide" id="doImport">确认导入</button>
+    <div class="qrHint hide" id="qrHint">用另一台设备打开本页 → 点「扫码导入」对准这个码</div>
+    <div class="scanWrap hide" id="scanWrap">
+      <video id="scanVideo" playsinline muted></video>
+      <div class="scanTip">把另一台设备上的二维码放进画面里</div>
+      <button class="btn ghost" id="scanCancel">取消</button>
+    </div>
+    <canvas id="scanCanvas" class="hide"></canvas>
     <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会稍长一点）</label>
     <div class="hint" id="codeHint">进度只存在本机，建议每月生成一次留底。码里含轮数、做过哪些题、待重做题；不含活跃地图和首答记录</div>
 
@@ -134,13 +137,16 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">c7909478fd46</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">2967ba76f2fc</span></div>
 </div>
 
 <!--PWA-UPDATE-->
 <div class="updateBar hide" id="updateBar">有新版本 · <b>点这里更新</b></div>
 <!--/PWA-UPDATE-->
 
+<!--PWA-LIB-->
+<script src="vendor/jsqr.js"></script>
+<!--/PWA-LIB-->
 <script src="vendor/qrcode.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
