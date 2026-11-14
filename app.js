@@ -293,8 +293,12 @@ function renderHome(){
     const st = lvSt(i), g = goalOf(i, st.pass), d = Object.keys(st.done).length;
     const b = document.createElement("button");
     b.className = (i===S.lv ? "on":"");
+    // 进度条表示"这一轮做完多少"（不是第几轮——那个上面文字已经写了）
+    const pct = g ? Math.min(100, Math.round(d / g * 100)) : 0;
+    b.title = `${L.lb} · 第 ${st.pass} 轮 · 已完成 ${d}/${g} 题`;
     b.innerHTML = `<span class="n">${L.lb}</span><span class="m">${L.n} 题 · 第${st.pass}轮</span>` +
-                  `<span class="lvb"><i style="width:${st.pass*10}%"></i></span>`;
+                  `<span class="lvb"><i style="width:${pct}%"></i></span>` +
+                  `<span class="m2">${d}/${g}</span>`;
     b.onclick = ()=>{ S.lv=i; save(); renderHome(); };
     box.appendChild(b);
   });
