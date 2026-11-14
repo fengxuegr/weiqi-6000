@@ -598,7 +598,7 @@ async function handleIncomingHash(){
 }
 
 /** 调试与测试用：把编解码挂到 window */
-window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode, startCustom };
+window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode, startCustom, startCountdown, addFiveMinutes };
 
 /* ---------- 错题集 ---------- */
 function renderWrong(){
@@ -783,10 +783,28 @@ function tick(){
   if(remaining <= 0 && !timeUp){
     timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); clearSess(); SFX.timeup();
     document.getElementById("pause").classList.add("hide");
+    document.getElementById("addTime").classList.remove("hide");
     document.getElementById("fb").className = "fb ok";
     document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工" +
         ((S.today.sec || 0) >= S.dailyMin*60 ? "（今天的 " + S.dailyMin + " 分钟够了）" : "");
   }
+}
+
+/** 时间到之后加时：再给 5 分钟，不占每日额度，队列按剩余未做题重建 */
+function addFiveMinutes(){
+  if(!timeUp) return;
+  timeUp = false; paused = false;
+  document.getElementById("addTime").classList.add("hide");
+  document.getElementById("pauseMask").classList.add("hide");
+  document.getElementById("pause").classList.remove("hide");
+  document.getElementById("pause").textContent = "暂停";
+  const st = lvSt(S.lv);
+  queue = planList(S.lv).filter(k => !st.done[k]);
+  startSecClock(0);
+  startCountdown(5 * 60 * 1000);
+  document.getElementById("fb").className = "fb";
+  if(queue.length) nextQ();
+  else { document.getElementById("fb").textContent = "这一轮已经没有要做的题了"; }
 }
 
 function startCountdown(ms){
@@ -816,6 +834,7 @@ document.getElementById("start").onclick = ()=>{
   running = false; remaining = 0;
   document.getElementById("clock").textContent = "";
   document.getElementById("pauseMask").classList.add("hide");
+  document.getElementById("addTime").classList.add("hide");
   document.getElementById("pause").classList.remove("hide");
   document.getElementById("pause").textContent = "暂停";
   // 只有限时模式才显示暂停按钮
@@ -860,6 +879,7 @@ document.getElementById("start").onclick = ()=>{
 document.getElementById("quit").onclick = ()=>{
   stopTimer(); stopSecClock(); endSession(); clearSess();
   document.getElementById("clock").textContent = "";
+  document.getElementById("addTime").classList.add("hide");
   document.getElementById("play").classList.add("hide");
   document.getElementById("home").classList.remove("hide");
   renderHome();
@@ -1016,4 +1036,20 @@ syncManual();
 /* 点「错题集」展开/收起 */
 document.getElementById("wrongBtn").onclick = ()=>{
   document.getElementById("wrongList").classList.toggle("hide");
+};
+
+/* 时间到后加时 */
+document.getElementById("addTime").onclick = addFiveMinutes;
+
+/* 重置今天：清掉今日计时与题数，已完成到第几轮不受影响 */
+document.getElementById("resetToday").onclick = ()=>{
+  const sec = (S.today && S.today.sec) || 0, n = (S.today && S.today.n) || 0;
+  if(!sec && !n){ alert("今天还没有记录，不用重置"); return; }
+  if(!confirm("把今天的 " + Math.round(sec/60) + " 分钟、 " + n + " 题清零？\n（活跃地图里今天那格也会清空；做到第几轮不受影响）")) return;
+  S.today = {d: today(), n: 0, sec: 0};
+  if(S.history) delete S.history[today()];
+  S.sess = null;
+  running = false; remaining = 0; sessSec = 0;
+  stopTimer(); stopSecClock();
+  save(); renderHome();
 };
