@@ -20,7 +20,7 @@
 
 <div id="home">
   <h1>围棋级位测试6000题</h1>
-  <div class="sub">6124 题 · 逢百重来十遍推进（每遍 100 题起，逐遍加 100）｜每天 15 分钟｜进度自动保存</div>
+  <div class="sub">6124 题 · 逢百重来十轮推进（每轮 100 题起，逐轮加 100）｜每天 5–15 分钟｜进度自动保存</div>
 
   <div class="who">
     <span class="wholab">当前练习</span>
@@ -46,7 +46,7 @@
         <text x="50" y="63" class="rt2">今天</text>
       </svg>
       <div class="proginfo">
-        <div class="row"><span>第 <b id="ppass">1</b> / 10 遍</span><span id="pinfo">—</span></div>
+        <div class="row"><span>第 <b id="ppass">1</b> / 10 轮</span><span id="pinfo">—</span></div>
         <div class="rounds" id="rounds"></div>
         <div class="row"><span>已完成 <b id="pdone">0</b> / <b id="pgoal">100</b> 题</span><span>未做 <b id="pundone">100</b></span></div>
         <div class="row"><span id="ptoday">今天 0 分钟 · 0 题</span><span id="ptarget">目标 5–15 分钟</span></div>
@@ -54,7 +54,7 @@
       </div>
     </div>
     <button class="btn" id="start">开始做题</button>
-    <button class="btn ghost" id="nextpass">这一遍做完了 → 进入下一遍</button>
+    <button class="btn ghost" id="nextpass">这一轮做完了 → 进入下一轮</button>
   </div>
 
   <div class="card">
@@ -82,7 +82,7 @@
     <div class="hint">老师建议每天 5–15 分钟，到点前想停随时点「返回」</div>
     <div class="row"><span>复习方式</span>
       <button class="btn ghost" style="width:auto;padding:6px 14px;margin:0" id="mode">严格模式</button></div>
-    <div class="hint" id="modehint">严格模式＝每遍把旧题重做一遍（老师方案）</div>
+    <div class="hint" id="modehint">严格模式＝每轮把旧题重做一轮（老师方案）</div>
     <div class="row" style="margin-top:10px"><span>音效</span>
       <span class="inline"><button class="chip on" id="sfxBtn">开</button>
         <input id="sfxVol" type="range" min="0" max="100" step="5" value="45" title="音量">
@@ -98,11 +98,11 @@
               autocomplete="off" placeholder="把另一台生成的进度码粘贴到这里"></textarea>
     <button class="btn hide" id="doImport">确认导入</button>
     <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会稍长一点）</label>
-    <div class="hint" id="codeHint">进度只存在本机，建议每月生成一次留底。码里含遍数、做过哪些题、待重做题；不含活跃地图和首答记录</div>
+    <div class="hint" id="codeHint">进度只存在本机，建议每月生成一次留底。码里含轮数、做过哪些题、待重做题；不含活跃地图和首答记录</div>
 
     <div class="row" style="margin-top:14px"><span>手动设置进度</span></div>
     <div class="row"><span>级别</span><span><select id="mLevel"></select></span></div>
-    <div class="row"><span>第几遍</span><span><input id="mPass" type="number" min="1" max="10" step="1" value="1"></span></div>
+    <div class="row"><span>第几轮</span><span><input id="mPass" type="number" min="1" max="10" step="1" value="1"></span></div>
     <div class="row"><span>已做到第几题</span><span><input id="mDone" type="number" min="0" max="1000" step="1" value="0"></span></div>
     <button class="btn ghost" id="mApply">应用（覆盖该档的完成记录）</button>
     <div class="hint" id="mHint">坑：只填「已做到第几题」时，前面那些题都会算作已完成</div>
@@ -132,7 +132,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">a1b773f9f9fe</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">0358ab2927aa</span></div>
 </div>
 
 <!--PWA-UPDATE-->

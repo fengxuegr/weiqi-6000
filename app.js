@@ -253,7 +253,7 @@ function renderWho(){
         let done = 0;
         Object.keys(o.st).forEach(k=>{ done += Object.keys(o.st[k].done || {}).length; });
         const pass = (o.st[0] && o.st[0].pass) || 1;
-        sub = `第 ${pass} 遍 · 累计 ${done} 题`;
+        sub = `第 ${pass} 轮 · 累计 ${done} 题`;
       }
     }catch(e){}
     html += `<div class="prow${p.id === cur ? " on" : ""}" data-id="${p.id}">` +
@@ -298,7 +298,7 @@ function renderHome(){
     const st = lvSt(i), g = goalOf(i, st.pass), d = Object.keys(st.done).length;
     const b = document.createElement("button");
     b.className = (i===S.lv ? "on":"");
-    b.innerHTML = `<span class="n">${L.lb}</span><span class="m">${L.n} 题 · 第${st.pass}遍</span>` +
+    b.innerHTML = `<span class="n">${L.lb}</span><span class="m">${L.n} 题 · 第${st.pass}轮</span>` +
                   `<span class="lvb"><i style="width:${st.pass*10}%"></i></span>`;
     b.onclick = ()=>{ S.lv=i; save(); renderHome(); };
     box.appendChild(b);
@@ -345,14 +345,14 @@ function renderHome(){
   document.getElementById("mode").textContent =
       S.mode==="strict" ? "严格模式（老师方案）" : "压缩模式（跳过旧题）";
   document.getElementById("modehint").textContent =
-      S.mode==="strict" ? "严格模式＝每遍把旧题重做一遍（老师方案）"
-                        : "压缩模式＝只做错题和本遍新增，会跳过旧题重做";
+      S.mode==="strict" ? "严格模式＝每轮把旧题重做一轮（老师方案）"
+                        : "压缩模式＝只做错题和本轮新增，会跳过旧题重做";
   syncDaily();
   syncSfx();
   document.getElementById("start").disabled = list.length === 0;
   const sn = list.length ? validSess() : null;
   if(!list.length){
-    document.getElementById("start").textContent = "这一遍已完成，点下面进入下一遍";
+    document.getElementById("start").textContent = "这一轮已完成，点下面进入下一轮";
   } else if(sn && S.dailyMode === "time"){
     const mm = Math.floor((sn.left || 0) / 60000), ss = Math.floor(((sn.left || 0) % 60000) / 1000);
     document.getElementById("start").textContent =
@@ -441,7 +441,7 @@ document.getElementById("sfxVol").oninput = (e)=>{
 document.getElementById("sfxVol").onchange = ()=>{ save(); SFX.stone(); };
 document.getElementById("mode").onclick = ()=>{
   if(S.mode === "strict"){
-    if(!confirm("压缩模式会跳过旧题重做，只做错题和本遍新增。\n老师的方法是「逢百重来」——每遍都要把旧题重做一遍。\n确定要切换吗？")) return;
+    if(!confirm("压缩模式会跳过旧题重做，只做错题和本轮新增。\n老师的方法是「逢百重来」——每轮都要把旧题重做一轮。\n确定要切换吗？")) return;
     S.mode = "compact";
   } else {
     S.mode = "strict";
@@ -450,16 +450,16 @@ document.getElementById("mode").onclick = ()=>{
 };
 document.getElementById("nextpass").onclick = ()=>{
   const st = lvSt(S.lv);
-  if(st.pass >= 10){ alert("这一级 10 遍已走完，本级毕业 🎉"); return; }
-  if(!confirm("确认本遍结束，进入第 " + (st.pass+1) + " 遍？\n下一遍要完成前 " + (100*(st.pass+1)) + " 题。")) return;
+  if(st.pass >= 10){ alert("这一级 10 轮已走完，本级毕业 🎉"); return; }
+  if(!confirm("确认本轮结束，进入第 " + (st.pass+1) + " 轮？\n下一轮要完成前 " + (100*(st.pass+1)) + " 题。")) return;
   st.pass++; st.done = {}; clearSess(); save(); renderHome();
 };
 /* ---------- 换设备：只搬「能接着做题」的核心进度 ----------
- * 传：遍数、做过哪些题、待重做、模式与时长设置（可选错题记录）
+ * 传：轮数、做过哪些题、待重做、模式与时长设置（可选错题记录）
  * 不传：活跃地图 history、首答记录 q、今日计数 today、会话快照 sess、音效 pace
  * 实测（每档做 300 题）：核心 1.0 KB、含错题 1.9 KB；完整包 8.9 KB */
 /* 紧凑编码：done 通常是「0..N 连成一片」，存 1000 个键太浪费。
- * 改成 [遍数, 前沿, 缺口列表]；若缺口比题目还多（极端稀疏），用 [遍数, -1, 题号列表]。
+ * 改成 [轮数, 前沿, 缺口列表]；若缺口比题目还多（极端稀疏），用 [轮数, -1, 题号列表]。
  * 实测：单档 300 题 988 → 160 字符；六档各 1000 题 3404 → 180 字符。 */
 function packSt(){
   const out = {};
@@ -604,9 +604,9 @@ async function handleIncomingHash(){
     if(!o || o.kind !== "portable") throw new Error("这不是进度码");
     const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
     const pass = ((o.st || {})[o.lv] || {}).pass || 1;
-    if(confirm("扫到另一台的进度：" + lb + " · 第 " + pass + " 遍。\n导入到「" + pname(PID) + "」并替换现有进度？")){
+    if(confirm("扫到另一台的进度：" + lb + " · 第 " + pass + " 轮。\n导入到「" + pname(PID) + "」并替换现有进度？")){
       applyPortable(o); renderHome();
-      alert("已导入：" + lb + " · 第 " + pass + " 遍");
+      alert("已导入：" + lb + " · 第 " + pass + " 轮");
     }
   }catch(e){
     alert("进度码无效：" + (e.message || e));
@@ -636,7 +636,7 @@ function syncManual(){
   const md = document.getElementById("mDone");
   md.max = String(cap);
   document.getElementById("mHint").textContent =
-      "当前可填 0–" + cap + " 题（第 " + pass + " 遍要做满 " + cap + " 题）";
+      "当前可填 0–" + cap + " 题（第 " + pass + " 轮要做满 " + cap + " 题）";
 }
 document.getElementById("mLevel").onchange = syncManual;
 document.getElementById("mPass").onchange = syncManual;
@@ -646,7 +646,7 @@ document.getElementById("mApply").onclick = ()=>{
   const cap = Math.min(100 * pass, DATA[lv].n);
   let k = Math.round(+document.getElementById("mDone").value || 0);
   k = Math.max(0, Math.min(cap, k));
-  if(!confirm("把「" + pname(PID) + "」的 " + DATA[lv].lb + " 设为：第 " + pass + " 遍、第 1–" + k + " 题已完成。\n该档现有的完成记录会被覆盖，确定吗？")) return;
+  if(!confirm("把「" + pname(PID) + "」的 " + DATA[lv].lb + " 设为：第 " + pass + " 轮、第 1–" + k + " 题已完成。\n该档现有的完成记录会被覆盖，确定吗？")) return;
   S.lv = lv;
   const st = lvSt(lv);
   st.pass = pass;
@@ -654,7 +654,7 @@ document.getElementById("mApply").onclick = ()=>{
   for(let i=0;i<k;i++) st.done[i] = 1;
   S.sess = null;                 // 旧会话快照作废
   save(); renderHome();
-  document.getElementById("mHint").textContent = "已设为：" + DATA[lv].lb + " · 第 " + pass + " 遍 · 已完成 " + k + " 题";
+  document.getElementById("mHint").textContent = "已设为：" + DATA[lv].lb + " · 第 " + pass + " 轮 · 已完成 " + k + " 题";
 };
 
 document.getElementById("mkCode").onclick = async ()=>{
@@ -690,9 +690,9 @@ document.getElementById("doImport").onclick = async ()=>{
     if(!o || o.kind !== "portable") throw new Error("这不是进度码");
     const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
     const pass = ((o.st || {})[o.lv] || {}).pass || 1;
-    if(!confirm("导入会把「" + pname(PID) + "」的进度替换成：" + lb + " · 第 " + pass + " 遍。\n活跃地图和首答记录保留本机的。确定吗？")) return;
+    if(!confirm("导入会把「" + pname(PID) + "」的进度替换成：" + lb + " · 第 " + pass + " 轮。\n活跃地图和首答记录保留本机的。确定吗？")) return;
     applyPortable(o); renderHome();
-    hint.textContent = "已导入：" + lb + " · 第 " + pass + " 遍";
+    hint.textContent = "已导入：" + lb + " · 第 " + pass + " 轮";
   }catch(e){
     hint.textContent = "导入失败：" + (e.message || "进度码无效");
   }
@@ -721,7 +721,7 @@ function saveSess(){
   save();
 }
 function clearSess(){ if(S.sess){ S.sess = null; save(); } }
-/** 快照有效条件：同一天、12 小时内、级别/遍次/模式都没变 */
+/** 快照有效条件：同一天、12 小时内、级别/轮次/模式都没变 */
 function validSess(){
   const s = S.sess;
   if(!s || !s.day || s.day !== today()) return null;
@@ -818,7 +818,7 @@ document.getElementById("start").onclick = ()=>{
 
   const st2 = lvSt(S.lv);
   document.getElementById("phead").textContent =
-      DATA[S.lv].lb + " · 第 " + st2.pass + " 遍 · " +
+      DATA[S.lv].lb + " · 第 " + st2.pass + " 轮 · " +
       (S.dailyMode==="free" ? "自由" : (S.dailyMode==="count" ? S.dailyCount+" 题" : S.dailyMin+" 分钟")) +
       (snap ? " · 接着上次" : "");
   document.getElementById("home").classList.add("hide");
