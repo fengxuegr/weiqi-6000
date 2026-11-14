@@ -367,18 +367,31 @@ function renderHome(){
   syncDaily();
   syncAuto();
   syncSfx();
-  document.getElementById("start").disabled = list.length === 0;
+  const doneAll = list.length === 0;
+  document.getElementById("start").classList.toggle("hide", doneAll);
+  document.getElementById("nextpass").classList.toggle("hide", !doneAll);
+  document.getElementById("roundDone").classList.toggle("hide", !doneAll);
+  if(doneAll){
+    const fs2 = firstStat(S.lv);
+    document.getElementById("rdTitle").textContent = st.pass >= 10
+      ? "✓ 第 10 轮完成 · 本级毕业 🎉"
+      : "✓ 第 " + st.pass + " 轮完成";
+    document.getElementById("rdInfo").textContent =
+      g + " 题做完" +
+      (fs2 ? " · 累计首答正确率 " + fs2.rate + "%" : "") +
+      " · 错题 " + wrongOf(S.lv).length + " 道";
+    document.getElementById("nextpass").textContent = st.pass >= 10
+      ? "本级 10 轮已走完"
+      : "进入第 " + (st.pass + 1) + " 轮（要做 " + (100 * (st.pass + 1)) + " 题）";
+  }
   const sn = list.length ? validSess() : null;
-  if(!list.length){
-    document.getElementById("start").textContent = "这一轮已完成，点下面进入下一轮";
-  } else if(sn && S.dailyMode === "time"){
+  if(list.length && sn && S.dailyMode === "time"){
     const mm = Math.floor((sn.left || 0) / 60000), ss = Math.floor(((sn.left || 0) % 60000) / 1000);
     document.getElementById("start").textContent =
         "继续上次（还剩 " + mm + ":" + String(ss).padStart(2, "0") + "）";
   } else {
     document.getElementById("start").textContent = "开始做题";
   }
-  document.getElementById("nextpass").classList.toggle("hide", list.length > 0);
   renderCalendar();
 }
 /** 连续做题天数：今天还没做就从昨天算起，避免白天空窗显示断签 */
@@ -469,7 +482,7 @@ document.getElementById("sfxVol").onchange = ()=>{ save(); SFX.stone(); };
 document.getElementById("nextpass").onclick = ()=>{
   const st = lvSt(S.lv);
   if(st.pass >= 10){ alert("这一级 10 轮已走完，本级毕业 🎉"); return; }
-  if(!confirm("确认本轮结束，进入第 " + (st.pass+1) + " 轮？\n下一轮要完成前 " + (100*(st.pass+1)) + " 题。")) return;
+  // 本轮已经全部做完，进下一轮不会丢任何东西，直接推进，不再弹确认框
   st.pass++; st.done = {}; clearSess(); save(); renderHome();
 };
 /* ---------- 换设备：只搬「能接着做题」的核心进度 ----------
