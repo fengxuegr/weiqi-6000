@@ -208,8 +208,3 @@ input[type=range]{width:96px;accent-color:#b8763a;vertical-align:middle}
 /* 扫码失败时，原因直接写在黑框里 */
 .scanTipErr{color:#ffd9d2;font-size:13px;line-height:1.6;padding:16px 12px;background:rgba(0,0,0,.75);
   white-space:pre-line;text-align:left}
-
-/* 级别卡里的 "已完成/目标" 小字 */
-.lv .m2, .lvbox .m2{font-size:10px;color:#b8ab97}
-#lvbox .m2{position:absolute;right:10px;bottom:8px;font-size:10px;color:#b8ab97}
-#lvbox button{position:relative}
