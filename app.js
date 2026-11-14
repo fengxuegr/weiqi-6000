@@ -219,6 +219,21 @@ function planList(i){
 }
 
 /* ---------- 首页 ---------- */
+/** 目标行：把"今天还剩多少"直接写出来，避免以为每次都是从头开始 */
+function targetLine(){
+  const doneSec = S.today.d === today() ? (S.today.sec || 0) : 0;
+  if(S.dailyMode === "count"){
+    const left = Math.max(0, S.dailyCount - S.today.n);
+    return "目标 " + S.dailyCount + " 题" + (left ? " · 还差 " + left : " · 已达标");
+  }
+  if(S.dailyMode === "time"){
+    const targetSec = S.dailyMin * 60;
+    if(doneSec >= targetSec) return "今天已做 " + Math.round(doneSec/60) + " 分钟 · 再练给 5 分钟";
+    const left = Math.ceil((targetSec - doneSec) / 60);
+    return "目标 " + S.dailyMin + " 分钟" + (doneSec ? " · 还差 " + left + " 分钟" : " · 5–15 均可");
+  }
+  return "不限量";
+}
 function dailyTargetText(){
   if(S.dailyMode === "count") return "目标 " + S.dailyCount + " 题";
   if(S.dailyMode === "time")  return "目标 " + S.dailyMin + " 分钟（5–15 均可）";
@@ -312,7 +327,7 @@ function renderHome(){
   document.getElementById("pdone").textContent = doneN;
   document.getElementById("pgoal").textContent = g;
   document.getElementById("pundone").textContent = list.length;
-  document.getElementById("ptarget").textContent = dailyTargetText();
+  document.getElementById("ptarget").textContent = targetLine();
 
   const fs = firstStat(S.lv);
   document.getElementById("pfirst").textContent =
@@ -490,7 +505,8 @@ function tick(){
     timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); SFX.timeup();
     document.getElementById("pause").classList.add("hide");
     document.getElementById("fb").className = "fb ok";
-    document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工";
+    document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工" +
+        ((S.today.sec || 0) >= S.dailyMin*60 ? "（今天的 " + S.dailyMin + " 分钟够了）" : "");
   }
 }
 
@@ -528,7 +544,13 @@ document.getElementById("start").onclick = ()=>{
     queue = all.slice(0, S.dailyCount);
   } else if(S.dailyMode === "time"){
     queue = all.slice();
-    startCountdown(S.dailyMin*60000);
+    // 倒计时接续"今天还剩多少分钟"，而不是每次都从满额重来
+    const targetSec = S.dailyMin * 60;
+    const doneSec = (S.today.d === today() ? (S.today.sec || 0) : 0);
+    let leftSec = targetSec - doneSec;
+    if(leftSec <= 0) leftSec = 300;      // 今天已经做够，仍允许再练 5 分钟
+    if(leftSec < 60) leftSec = 60;       // 至少 1 分钟，免得一进来就"时间到"
+    startCountdown(leftSec * 1000);
   } else {
     queue = all.slice();          // 自由模式：不限量，做到点返回
   }
