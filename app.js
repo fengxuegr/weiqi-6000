@@ -453,7 +453,7 @@ document.getElementById("impfile").onchange = (e)=>{
 
 /* ---------- 做题 ---------- */
 let queue = [], cur = null, cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
-let timeUp = false, deadline = 0, tickId = null;
+let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
@@ -464,28 +464,58 @@ function endSession(){
     save();
   }
 }
+/** 倒计时按"实际在做题的时间"累计，暂停/切后台都不走表 */
 function tick(){
-  const left = Math.max(0, deadline - Date.now());
-  const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
-  document.getElementById("clock").textContent = left > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
-  if(left <= 0 && !timeUp){
-    timeUp = true; stopTimer(); queue = []; endSession(); SFX.timeup();
+  const now = Date.now();
+  // 单次最多扣 5 秒：万一系统把定时器节流（或设备睡眠后没触发 visibilitychange），
+  // 不至于一口气把十几分钟全扣掉
+  if(running) remaining = Math.max(0, remaining - Math.min(5000, now - lastTick));
+  lastTick = now;
+  const m = Math.floor(remaining/60000), s = Math.floor(remaining%60000/1000);
+  document.getElementById("clock").textContent =
+      remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
+  if(remaining <= 0 && !timeUp){
+    timeUp = true; running = false; stopTimer(); queue = []; endSession(); SFX.timeup();
+    document.getElementById("pause").classList.add("hide");
     document.getElementById("fb").className = "fb ok";
     document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工";
   }
+}
+
+function startCountdown(ms){
+  remaining = ms; running = true; lastTick = Date.now();
+  stopTimer(); tickId = setInterval(tick, 250); tick();
+}
+function pauseSession(){
+  if(!running || timeUp) return;
+  running = false; stopTimer();
+  document.getElementById("pause").textContent = "继续";
+  document.getElementById("pauseMask").classList.remove("hide");
+}
+function resumeSession(){
+  if(timeUp || running) return;
+  running = true; lastTick = Date.now();
+  stopTimer(); tickId = setInterval(tick, 250);
+  document.getElementById("pause").textContent = "暂停";
+  document.getElementById("pauseMask").classList.add("hide");
 }
 document.getElementById("start").onclick = ()=>{
   SFX.unlock();
   const st = lvSt(S.lv);
   const all = planList(S.lv).filter(k => !st.done[k]);
   ok = 0; bad = 0; sessN = 0; timeUp = false; requeued = {}; stopTimer();
+  running = false; remaining = 0;
   document.getElementById("clock").textContent = "";
+  document.getElementById("pauseMask").classList.add("hide");
+  document.getElementById("pause").classList.remove("hide");
+  document.getElementById("pause").textContent = "暂停";
+  // 只有限时模式才显示暂停按钮
+  document.getElementById("pause").classList.toggle("hide", S.dailyMode !== "time");
   if(S.dailyMode === "count"){
     queue = all.slice(0, S.dailyCount);
   } else if(S.dailyMode === "time"){
     queue = all.slice();
-    deadline = Date.now() + S.dailyMin*60000;
-    tickId = setInterval(tick, 500); tick();
+    startCountdown(S.dailyMin*60000);
   } else {
     queue = all.slice();          // 自由模式：不限量，做到点返回
   }
@@ -569,6 +599,7 @@ function solved(){
   save();
 }
 function onTap(e){
+  if(running === false && !timeUp && S.dailyMode === "time") return;   // 已暂停，棋盘不响应
   if(answered) { nextQ(); return; }
   const el = e.currentTarget, rect = el.getBoundingClientRect(), vb = el.viewBox.baseVal;
   const px = (e.clientX - rect.left) / rect.width * vb.width;
@@ -637,3 +668,11 @@ document.getElementById("whoBtn").onclick = ()=>{
   const p = document.getElementById("whoPanel");
   p.classList.toggle("hide");
 };
+
+/* 暂停/继续 + 切到后台自动暂停（孩子被叫走时不烧时间） */
+document.getElementById("pause").onclick = ()=>{
+  if(running) pauseSession(); else resumeSession();
+};
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "hidden") pauseSession();
+});

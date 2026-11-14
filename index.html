@@ -98,9 +98,12 @@
   <div class="top">
     <span id="phead">—</span>
     <span id="clock"></span>
-    <button class="btn ghost" style="width:auto;padding:6px 14px;margin:0" id="quit">返回</button>
+    <button class="btn ghost hide" style="width:auto;padding:6px 12px;margin:0" id="pause">暂停</button>
+    <button class="btn ghost" style="width:auto;padding:6px 12px;margin:0" id="quit">返回</button>
   </div>
-  <div class="wd"><svg id="svg" viewBox="0 0 400 400"></svg></div>
+  <div class="wd"><svg id="svg" viewBox="0 0 400 400"></svg>
+    <div class="pauseMask hide" id="pauseMask"><b>已暂停</b><span>点右上「继续」回到题上</span></div>
+  </div>
   <div class="info">
     <div>本题<b id="iq">—</b></div>
     <div>本次对<b id="ir">0</b></div>
@@ -114,7 +117,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">cbda7b94f962</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">623646fed012</span></div>
 </div>
 
 <!--PWA-UPDATE-->
