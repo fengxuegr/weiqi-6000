@@ -142,9 +142,9 @@ const SFX = (function(){
 })();
 
 function fresh(){
-  return {v:3, lv:0, mode:"strict", dailyMode:"time", dailyCount:DAILY, dailyMin:15,
+  return {v:3, lv:0, mode:"strict", dailyMode:"time", dailyCount:DAILY, dailyMin:10,
           st:{}, wrong:{}, retry:{}, q:{}, pace:DAILY, sfx:{on:true, vol:0.45},
-          today:{d:"", n:0}, history:{}};
+          today:{d:"", n:0, sec:0}, history:{}};
 }
 function load(){
   try{
@@ -157,7 +157,7 @@ function load(){
       o.v = 3;
       o.dailyMode = o.dailyMode || "time";
       o.dailyCount = o.dailyCount || DAILY;
-      o.dailyMin = o.dailyMin || 15;
+      o.dailyMin = o.dailyMin || 10;
       o.history = o.history || {};
       o.q = o.q || {};          // 每题首答记录 [首答对错, 累计错点, 首手耗时ms, 最近做对日期]
       o.retry = o.retry || {};  // 待重做（点了错因看答案的题）
@@ -173,7 +173,7 @@ function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMon
 function dateKey(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 /** 每答对一题记一次：同时更新今日计数和活跃地图的按日历史 */
 function markDone(){
-  if(S.today.d !== today()) S.today = {d: today(), n: 0};
+  if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
   S.today.n++;
   if(!S.history) S.history = {};
   S.history[today()] = S.today.n;
@@ -220,8 +220,8 @@ function planList(i){
 
 /* ---------- 首页 ---------- */
 function dailyTargetText(){
-  if(S.dailyMode === "count") return S.dailyCount + " 题";
-  if(S.dailyMode === "time")  return S.dailyMin + " 分钟 · 约 " + S.pace + " 题";
+  if(S.dailyMode === "count") return "目标 " + S.dailyCount + " 题";
+  if(S.dailyMode === "time")  return "目标 " + S.dailyMin + " 分钟（5–15 均可）";
   return "不限量";
 }
 /** 顶部"当前练习"那一行 + 切换面板 */
@@ -289,18 +289,23 @@ function renderHome(){
     box.appendChild(b);
   });
 
-  if(S.today.d !== today()){ S.today = {d: today(), n: 0}; save(); }
+  if(S.today.d !== today()){ S.today = {d: today(), n: 0, sec: 0}; save(); }
 
   const st = lvSt(S.lv), L = DATA[S.lv], g = goalOf(S.lv, st.pass);
   const list = planList(S.lv).filter(k=>!st.done[k]);
   const doneN = Object.keys(st.done).length;
 
-  // 环形 = 今天做了多少题 / 15 分钟大致能做多少题（滚动估计）
-  const pct = Math.min(100, Math.round(S.today.n / Math.max(1, S.pace) * 100));
+  // 环形 = 今天累计做题时长 / 5 分钟（老师给的下限）。做够 5 分钟就满，继续做到 15 分钟更好
+  const todaySec = S.today.sec || 0;
+  const pct = Math.min(100, Math.round(todaySec / 300 * 100));
   const C = 2 * Math.PI * 42;
   const fg = document.getElementById("ringfg");
   fg.setAttribute("stroke-dasharray", (C*pct/100).toFixed(1) + " " + C.toFixed(1));
-  document.getElementById("ringpct").textContent = S.today.n + " 题";
+  document.getElementById("ringpct").textContent =
+      todaySec < 60 ? (todaySec + " 秒") : (Math.round(todaySec/60) + " 分");
+  document.getElementById("ptoday").textContent =
+      (todaySec < 60 ? Math.round(todaySec) + " 秒" : Math.round(todaySec/60) + " 分钟") +
+      " · " + S.today.n + " 题";
 
   document.getElementById("ppass").textContent = st.pass;
   document.getElementById("pinfo").textContent = L.lb;                 // 级别名单独占右侧，避免长句折行
@@ -454,15 +459,22 @@ document.getElementById("impfile").onchange = (e)=>{
 /* ---------- 做题 ---------- */
 let queue = [], cur = null, cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
 let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
+let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数（暂停时不计）
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
+function stopSecClock(){ if(secTick){ clearInterval(secTick); secTick = null; } }
+function startSecClock(){
+  sessSec = 0; paused = false; stopSecClock();
+  // 每秒累加一次；暂停或时间到就停，切后台由 visibilitychange 置 paused
+  secTick = setInterval(()=>{ if(!paused && !timeUp) sessSec++; }, 1000);
+}
 /** 会话收尾：把这次 15 分钟实际做了多少题，滚动并入 pace 估计 */
 function endSession(){
-  if(sessN > 0 && S.dailyMode === "time"){
-    S.pace = Math.max(5, Math.round(S.pace*0.6 + sessN*0.4));
-    save();
-  }
+  if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
+  if(sessSec > 0){ S.today.sec = (S.today.sec || 0) + sessSec; sessSec = 0; }
+  if(sessN > 0 && S.dailyMode === "time") S.pace = Math.max(5, Math.round(S.pace*0.6 + sessN*0.4));
+  save();
 }
 /** 倒计时按"实际在做题的时间"累计，暂停/切后台都不走表 */
 function tick(){
@@ -475,7 +487,7 @@ function tick(){
   document.getElementById("clock").textContent =
       remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
   if(remaining <= 0 && !timeUp){
-    timeUp = true; running = false; stopTimer(); queue = []; endSession(); SFX.timeup();
+    timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); SFX.timeup();
     document.getElementById("pause").classList.add("hide");
     document.getElementById("fb").className = "fb ok";
     document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工";
@@ -488,13 +500,13 @@ function startCountdown(ms){
 }
 function pauseSession(){
   if(!running || timeUp) return;
-  running = false; stopTimer();
+  running = false; paused = true; stopTimer();
   document.getElementById("pause").textContent = "继续";
   document.getElementById("pauseMask").classList.remove("hide");
 }
 function resumeSession(){
   if(timeUp || running) return;
-  running = true; lastTick = Date.now();
+  running = true; paused = false; lastTick = Date.now();
   stopTimer(); tickId = setInterval(tick, 250);
   document.getElementById("pause").textContent = "暂停";
   document.getElementById("pauseMask").classList.add("hide");
@@ -511,6 +523,7 @@ document.getElementById("start").onclick = ()=>{
   document.getElementById("pause").textContent = "暂停";
   // 只有限时模式才显示暂停按钮
   document.getElementById("pause").classList.toggle("hide", S.dailyMode !== "time");
+  startSecClock();
   if(S.dailyMode === "count"){
     queue = all.slice(0, S.dailyCount);
   } else if(S.dailyMode === "time"){
@@ -528,7 +541,7 @@ document.getElementById("start").onclick = ()=>{
   nextQ();
 };
 document.getElementById("quit").onclick = ()=>{
-  stopTimer(); endSession();
+  stopTimer(); stopSecClock(); endSession();
   document.getElementById("clock").textContent = "";
   document.getElementById("play").classList.add("hide");
   document.getElementById("home").classList.remove("hide");
@@ -599,7 +612,7 @@ function solved(){
   save();
 }
 function onTap(e){
-  if(running === false && !timeUp && S.dailyMode === "time") return;   // 已暂停，棋盘不响应
+  if(paused) return;                                                    // 已暂停，棋盘不响应
   if(answered) { nextQ(); return; }
   const el = e.currentTarget, rect = el.getBoundingClientRect(), vb = el.viewBox.baseVal;
   const px = (e.clientX - rect.left) / rect.width * vb.width;

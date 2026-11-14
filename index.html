@@ -49,7 +49,7 @@
         <div class="row"><span>第 <b id="ppass">1</b> / 10 遍</span><span id="pinfo">—</span></div>
         <div class="rounds" id="rounds"></div>
         <div class="row"><span>已完成 <b id="pdone">0</b> / <b id="pgoal">100</b> 题</span><span>未做 <b id="pundone">100</b></span></div>
-        <div class="row"><span>今日目标</span><span id="ptarget">—</span></div>
+        <div class="row"><span id="ptoday">今天 0 分钟 · 0 题</span><span id="ptarget">目标 5–15 分钟</span></div>
         <div class="row"><span>首答正确率</span><span id="pfirst">—</span></div>
       </div>
     </div>
@@ -78,7 +78,8 @@
         <button class="chip" data-n="20">20</button><button class="chip" data-n="50">50</button>
         <button class="chip" data-n="100">100</button><button class="chip" data-n="200">200</button></span></div>
     <div class="row" id="rowTime"><span>每次时长（分钟）</span>
-      <span><select id="selMin"><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option><option>45</option><option>60</option></select></span></div>
+      <span><select id="selMin"><option>5</option><option>8</option><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option><option>45</option><option>60</option></select></span></div>
+    <div class="hint">老师建议每天 5–15 分钟，到点前想停随时点「返回」</div>
     <div class="row"><span>复习方式</span>
       <button class="btn ghost" style="width:auto;padding:6px 14px;margin:0" id="mode">严格模式</button></div>
     <div class="hint" id="modehint">严格模式＝每遍把旧题重做一遍（老师方案）</div>
@@ -117,7 +118,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">623646fed012</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">5750e9cac5eb</span></div>
 </div>
 
 <!--PWA-UPDATE-->
