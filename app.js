@@ -747,14 +747,45 @@ function scanLoop(){
   }
   scanRAF = requestAnimationFrame(scanLoop);
 }
+/** 依次尝试几种约束：部分安卓机不接受 ideal / 对象形式的 facingMode */
+async function openCamera(){
+  const tries = [
+    { video: { facingMode: { ideal: "environment" } }, audio: false },
+    { video: { facingMode: "environment" }, audio: false },
+    { video: true, audio: false }
+  ];
+  let last = null;
+  for(let i=0;i<tries.length;i++){
+    try{ return await navigator.mediaDevices.getUserMedia(tries[i]); }
+    catch(e){
+      last = e;
+      // 权限被拒 / 非安全上下文，换约束也没用，直接停
+      if(e && (e.name === "NotAllowedError" || e.name === "SecurityError" || e.name === "PermissionDeniedError")) break;
+    }
+  }
+  throw last || new Error("未知错误");
+}
+
+/** 安卓上 videoWidth 常常要等 loadedmetadata，直接 play 会拿到 0×0 */
+function waitVideoReady(v){
+  return new Promise(res=>{
+    if(v.videoWidth && v.readyState >= 1) return res(true);
+    let done = false;
+    const finish = ok=>{ if(!done){ done = true; res(ok); } };
+    v.addEventListener("loadedmetadata", ()=>finish(true), { once:true });
+    setTimeout(()=>finish(!!v.videoWidth), 3000);
+  });
+}
+
 document.getElementById("scanCode").onclick = async ()=>{
   const hint = document.getElementById("codeHint");
-  if(typeof jsQR !== "function"){
-    hint.textContent = "扫码需要网页版（https）打开；本地文件版请改用二维码 + 系统相机";
+  const diag = "（" + location.protocol + "｜" + (navigator.mediaDevices ? "有 camera API" : "无 camera API") + "）";
+  if(typeof jsQR === "function"){} else {
+    hint.textContent = "扫码功能只在网页版可用；本地文件版请用系统相机扫" + diag;
     return;
   }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    hint.textContent = "这个浏览器不支持调用摄像头";
+    hint.textContent = "这个浏览器不提供摄像头接口，换 Chrome 打开试试" + diag;
     return;
   }
   document.getElementById("qrBox").classList.add("hide");
@@ -762,19 +793,32 @@ document.getElementById("scanCode").onclick = async ()=>{
   document.getElementById("scanWrap").classList.remove("hide");
   hint.textContent = "正在打开摄像头…";
   try{
-    scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" } }, audio: false
-    });
+    scanStream = await openCamera();
     const v = document.getElementById("scanVideo");
     v.srcObject = scanStream;
-    await v.play();
+    await waitVideoReady(v);
+    try{ await v.play(); }catch(e){ /* 有些安卓机 play() 会先报错，只要出画面就能解 */ }
+    if(!v.videoWidth){
+      hint.textContent = "摄像头已开但拿不到画面，可能被其它 App 占用" + diag;
+      stopScan();
+      return;
+    }
     hint.textContent = "对准另一台设备上的二维码";
     scanLoop();
   }catch(e){
     stopScan();
-    hint.textContent = "打不开摄像头：" +
-      (e && e.name === "NotAllowedError" ? "权限被拒绝，请在设置里允许相机后重试"
-       : (e && e.name === "NotFoundError" ? "这台设备没有可用摄像头" : (e.message || e)));
+    const name = (e && e.name) || "";
+    let msg;
+    if(name === "NotAllowedError" || name === "PermissionDeniedError")
+      msg = "权限被拒绝：请点地址栏左侧的锁/信息图标 → 允许相机，然后重试";
+    else if(name === "NotFoundError" || name === "DevicesNotFoundError")
+      msg = "这台设备没有可用摄像头";
+    else if(name === "NotReadableError" || name === "TrackStartError")
+      msg = "摄像头被其它程序占用（比如相机、微信视频），关掉再试";
+    else if(name === "SecurityError")
+      msg = "当前打开方式不允许用摄像头：请用 https 网页或 Chrome，别在微信里打开";
+    else msg = (e && e.message) || String(e);
+    hint.textContent = "打不开摄像头：" + msg + (name ? "｜" + name : "") + diag;
   }
 };
 document.getElementById("scanCancel").onclick = ()=>{
