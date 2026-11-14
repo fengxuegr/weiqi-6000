@@ -208,3 +208,6 @@ input[type=range]{width:96px;accent-color:#b8763a;vertical-align:middle}
 /* 扫码失败时，原因直接写在黑框里 */
 .scanTipErr{color:#ffd9d2;font-size:13px;line-height:1.6;padding:16px 12px;background:rgba(0,0,0,.75);
   white-space:pre-line;text-align:left}
+
+.whoTip{font-size:11px;color:#a3957f;padding:6px 10px 4px;line-height:1.5}
+.whobtn i{font-size:12px;color:#b8763a}

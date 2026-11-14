@@ -9,8 +9,13 @@ const CKEY = BASE + "_current";
 function profiles(){
   let arr = [];
   try{ arr = JSON.parse(localStorage.getItem(PKEY)) || []; }catch(e){}
+  {
+    let fixed = false;
+    arr.forEach(x=>{ if(x.name === "1 号"){ x.name = "孩子 1"; fixed = true; } });
+    if(fixed) localStorage.setItem(PKEY, JSON.stringify(arr));
+  }
   if(!arr.length){
-    arr = [{id:"p1", name:"1 号"}];
+    arr = [{id:"p1", name:"孩子 1"}];
     localStorage.setItem(PKEY, JSON.stringify(arr));
     // 首次升级：把原来的单档进度整份搬到 p1，老键原样保留（不清空，留作兜底）
     const old = localStorage.getItem(BASE);
@@ -239,7 +244,7 @@ function renderWho(){
   const cur = curPid();
   document.getElementById("whoName").textContent = pname(cur);
   const arr = profiles();
-  let html = "";
+  let html = '<div class="whoTip">每个孩子各存一份独立进度 · 点名字切换，或新增一个</div>';
   arr.forEach(p=>{
     let sub = "还没开始";
     try{
