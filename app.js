@@ -858,6 +858,56 @@ document.getElementById("scanCode").onclick = async ()=>{
     scanFail("打不开摄像头：" + msg + extra + (name ? "\n\n" + name : "") + diag);
   }
 };
+/* ---------- 从相册选二维码图片（不需要相机权限） ---------- */
+function decodeFromImage(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const max = 1600;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const cv = document.getElementById("scanCanvas");
+        cv.width = w; cv.height = h;
+        const g = cv.getContext("2d");
+        g.drawImage(img, 0, 0, w, h);
+        const data = g.getImageData(0, 0, w, h);
+        URL.revokeObjectURL(url);
+        // 图片可能是反色的码，这里两种都试
+        const res = jsQR(data.data, w, h, { inversionAttempts: "attemptBoth" });
+        if(res && res.data) resolve(res.data);
+        else reject(new Error("empty"));
+      }catch(e){ URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("image")); };
+    img.src = url;
+  });
+}
+document.getElementById("albumCode").onclick = ()=>{
+  document.getElementById("qrFile").click();
+};
+document.getElementById("qrFile").onchange = async (e)=>{
+  const hint = document.getElementById("codeHint");
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if(!f) return;
+  if(typeof jsQR !== "function"){ hint.textContent = "解码库没加载成功，刷新页面再试"; return; }
+  hint.textContent = "正在识别图片…";
+  try{
+    const txt = await decodeFromImage(f);
+    const code = pickCode(txt);
+    if(!code){ hint.textContent = "图片里是一段文字，但不是本应用的进度码"; return; }
+    const msg = await importFromCode(code);
+    hint.textContent = msg ? "已导入：" + msg : "已取消导入";
+  }catch(err){
+    hint.textContent = (err && err.message === "empty")
+      ? "这张图里找不到二维码：尽量用原图、别裁剪，截图时让码占满画面"
+      : "读取图片失败：" + ((err && err.message) || err);
+  }
+};
+
 document.getElementById("scanCancel").onclick = ()=>{
   stopScan();
   document.getElementById("codeHint").textContent = "已取消扫码";
