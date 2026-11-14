@@ -204,13 +204,8 @@ function firstStat(lv){
 function planList(i){
   const st = lvSt(i), g = goalOf(i, st.pass);
   const idx = []; for(let k=0;k<g;k++) idx.push(k);
-  let base;
-  if(S.mode === "compact" && st.pass > 1){
-    const w = new Set(wrongOf(i));
-    base = idx.filter(k => w.has(k) || k >= goalOf(i, st.pass-1));
-  } else {
-    base = idx;
-  }
+  // 只保留老师方案：每轮把目标范围内的旧题全部重做一遍
+  const base = idx;
   const rt = S.retry[i] || {};
   const first = base.filter(k => rt[k]).slice(0, RETRY_MAX);
   if(!first.length) return base;
@@ -341,12 +336,7 @@ function renderHome(){
     rb.appendChild(d);
   }
 
-  document.getElementById("wcount").textContent = wrongOf(S.lv).length + " 道";
-  document.getElementById("mode").textContent =
-      S.mode==="strict" ? "严格模式（老师方案）" : "压缩模式（跳过旧题）";
-  document.getElementById("modehint").textContent =
-      S.mode==="strict" ? "严格模式＝每轮把旧题重做一轮（老师方案）"
-                        : "压缩模式＝只做错题和本轮新增，会跳过旧题重做";
+  renderWrong();
   syncDaily();
   syncSfx();
   document.getElementById("start").disabled = list.length === 0;
@@ -439,15 +429,6 @@ document.getElementById("sfxVol").oninput = (e)=>{
   b.textContent = S.sfx.vol > 0.001 ? "开" : "关";
 };
 document.getElementById("sfxVol").onchange = ()=>{ save(); SFX.stone(); };
-document.getElementById("mode").onclick = ()=>{
-  if(S.mode === "strict"){
-    if(!confirm("压缩模式会跳过旧题重做，只做错题和本轮新增。\n老师的方法是「逢百重来」——每轮都要把旧题重做一轮。\n确定要切换吗？")) return;
-    S.mode = "compact";
-  } else {
-    S.mode = "strict";
-  }
-  save(); renderHome();
-};
 document.getElementById("nextpass").onclick = ()=>{
   const st = lvSt(S.lv);
   if(st.pass >= 10){ alert("这一级 10 轮已走完，本级毕业 🎉"); return; }
@@ -617,7 +598,58 @@ async function handleIncomingHash(){
 }
 
 /** 调试与测试用：把编解码挂到 window */
-window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode };
+window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode, startCustom };
+
+/* ---------- 错题集 ---------- */
+function renderWrong(){
+  const idxs = wrongOf(S.lv);
+  const btn = document.getElementById("wrongBtn");
+  if(btn) btn.textContent = idxs.length + " 道";
+  const box = document.getElementById("wrongList");
+  if(!box) return;
+  if(!idxs.length){
+    box.innerHTML = '<div class="emptyLine">这一档还没有错题</div>';
+    return;
+  }
+  const reasons = S.wrong[S.lv] || {};
+  let html = "";
+  idxs.slice(0, 200).forEach(i=>{
+    html += '<div class="wrow"><span class="wn">第 ' + (i+1) + ' 题</span>' +
+            '<span class="wr">' + esc(reasons[i] || "未记原因") + '</span></div>';
+  });
+  if(idxs.length > 200) html += '<div class="emptyLine">…另有 ' + (idxs.length-200) + ' 道未显示</div>';
+  html += '<div class="wact"><button class="chip" id="practiceWrong">重练这 ' + idxs.length + ' 道</button>' +
+          '<button class="chip" id="clearWrong">清空本档</button></div>';
+  box.innerHTML = html;
+
+  document.getElementById("practiceWrong").onclick = ()=>{
+    const list = wrongOf(S.lv).slice();
+    if(!list.length) return;
+    box.classList.add("hide");
+    startCustom(list);
+  };
+  document.getElementById("clearWrong").onclick = ()=>{
+    if(!confirm("清空 " + DATA[S.lv].lb + " 的错题记录？\n只清错题清单，不影响已完成进度。")) return;
+    S.wrong[S.lv] = {}; S.retry[S.lv] = {};
+    save(); renderHome();
+  };
+}
+/** 不按每日额度、只把给定题号刷一遍（错题重练用）。做对仍算完成。 */
+function startCustom(list){
+  SFX.unlock();
+  ok = 0; bad = 0; sessN = 0; timeUp = false; requeued = {}; stopTimer();
+  running = false; remaining = 0;
+  document.getElementById("clock").textContent = "重练";
+  document.getElementById("pauseMask").classList.add("hide");
+  document.getElementById("pause").classList.add("hide");
+  queue = list.slice();
+  startSecClock(0);
+  document.getElementById("phead").textContent =
+      DATA[S.lv].lb + " · 错题重练（" + list.length + " 道）";
+  document.getElementById("home").classList.add("hide");
+  document.getElementById("play").classList.remove("hide");
+  nextQ();
+}
 
 /* ---------- 手动设置进度（换机、跳着做、重置某一档） ---------- */
 function fillManualLevels(){
@@ -981,3 +1013,7 @@ handleIncomingHash();
 window.addEventListener("hashchange", handleIncomingHash);
 fillManualLevels();
 syncManual();
+/* 点「错题集」展开/收起 */
+document.getElementById("wrongBtn").onclick = ()=>{
+  document.getElementById("wrongList").classList.toggle("hide");
+};
