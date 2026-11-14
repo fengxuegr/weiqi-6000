@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>围棋级位测试6000题</title>
+<link rel="stylesheet" href="style.css">
+<!--PWA-HEAD-->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#b8763a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="围棋6000题">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!--/PWA-HEAD-->
+</head>
+<body>
+<div class="wrap">
+
+<div id="home">
+  <h1>围棋级位测试6000题</h1>
+  <div class="sub">围棋级位题库 6124 题 · 十轮累计循环｜自由 / 题数 / 时间 三种节奏｜进度自动保存</div>
+<!--PWA-TIP-->
+  <div class="tip hide" id="iosTip">点底部「分享」→「添加到主屏幕」，以后全屏打开、断网也能做</div>
+<!--/PWA-TIP-->
+
+  <div class="card">
+    <h2>1 选级别</h2>
+    <div class="lv" id="lvbox"></div>
+  </div>
+
+  <div class="card">
+    <h2>2 今天的任务</h2>
+    <div class="progwrap">
+      <svg viewBox="0 0 100 100" class="ring">
+        <circle cx="50" cy="50" r="42" class="ringbg"/>
+        <circle id="ringfg" cx="50" cy="50" r="42" class="ringfg"/>
+        <text id="ringpct" x="50" y="48" class="rt1">0%</text>
+        <text x="50" y="64" class="rt2">本轮</text>
+      </svg>
+      <div class="proginfo">
+        <div class="row"><span>当前进度</span><span id="pinfo">—</span></div>
+        <div class="rounds" id="rounds"></div>
+        <div class="row"><span>本轮目标</span><span id="pgoal">—</span></div>
+        <div class="row"><span>今日已做</span><span id="ptoday">0 / 12 题</span></div>
+      </div>
+    </div>
+    <button class="btn" id="start">开始做题</button>
+    <button class="btn ghost" id="nextpass">这一轮做完了 → 进入下一轮</button>
+  </div>
+
+  <div class="card">
+    <h2>3 本月活跃地图</h2>
+    <div class="row"><span>当前连续做题</span><span id="streak">连续 0 天</span></div>
+    <div class="msline"><i id="msfill"></i><b data-d="7" style="left:25%"></b><b data-d="14" style="left:50%"></b><b data-d="28" style="left:100%"></b></div>
+    <div class="mslabels"><span>7 天</span><span>14 天</span><span>28 天</span></div>
+    <div class="cal" id="cal"></div>
+    <div class="legend">
+      <span>未做</span><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i><span>多做</span>
+    </div>
+    <div class="row" style="margin-top:10px"><span>本月累计</span><span id="monthstat">—</span></div>
+  </div>
+
+  <div class="card">
+    <h2>4 每日节奏与设置</h2>
+    <div class="row"><span>今天按什么停</span>
+      <span class="seg"><button id="mFree">自由</button><button id="mCount" class="on">固定题数</button><button id="mTime">固定时间</button></span></div>
+    <div class="row" id="rowCount"><span>每天题数</span>
+      <span class="inline"><input id="numCount" type="number" min="5" max="2000" step="5" value="20">
+        <button class="chip" data-n="20">20</button><button class="chip" data-n="50">50</button>
+        <button class="chip" data-n="100">100</button><button class="chip" data-n="200">200</button></span></div>
+    <div class="row" id="rowTime"><span>每次时长（分钟）</span>
+      <span><select id="selMin"><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option><option>45</option><option>60</option></select></span></div>
+    <div class="row"><span>复习轮只做错题（压缩模式）</span>
+      <button class="btn ghost" style="width:auto;padding:6px 14px;margin:0" id="mode">严格模式</button></div>
+    <div class="row" style="margin-top:10px"><span>错题记录</span><span id="wcount">0 道</span></div>
+    <button class="btn ghost" id="export">导出进度 JSON</button>
+    <button class="btn ghost" id="import">导入进度 JSON（恢复备份）</button>
+    <input type="file" id="impfile" accept=".json,application/json" class="hide">
+  </div>
+</div>
+
+<div id="play" class="hide">
+  <div class="top">
+    <span id="phead">—</span>
+    <span id="clock"></span>
+    <button class="btn ghost" style="width:auto;padding:6px 14px;margin:0" id="quit">返回</button>
+  </div>
+  <div class="wd"><svg id="svg" viewBox="0 0 400 400"></svg></div>
+  <div class="info">
+    <div>本题<b id="iq">—</b></div>
+    <div>本次对<b id="ir">0</b></div>
+    <div>本次错<b id="iw">0</b></div>
+  </div>
+  <div class="fb" id="fb">点黑子落子</div>
+  <div class="types hide" id="types">
+    <button data-t="气数">气数看错</button>
+    <button data-t="眼位">没看见眼位</button>
+    <button data-t="顺序">顺序走反</button>
+  </div>
+</div>
+
+<div class="foot">数据来自本机题库文件，仅供自家练习</div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+<!--PWA-SCRIPT-->
+<script>
+/* 装到主屏幕的两件事：iOS 上给一句引导；https 下注册离线缓存 */
+(function () {
+  var ua = navigator.userAgent;
+  var iOS = /iPad|iPhone|iPod/.test(ua) ||
+            (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var standalone = window.navigator.standalone === true ||
+                   (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  var tip = document.getElementById("iosTip");
+  if (tip && iOS && !standalone) tip.classList.remove("hide");
+
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+})();
+</script>
+<!--/PWA-SCRIPT-->
+</body>
+</html>
