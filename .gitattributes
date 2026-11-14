@@ -1,0 +1,6 @@
+# 字体/图片按二进制处理，避免 git 换行符转换破坏
+*.png binary
+*.webmanifest text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
