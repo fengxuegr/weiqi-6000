@@ -2,12 +2,12 @@
  *
  * 目标：装到主屏幕之后，断网也能做题。
  * 策略：安装时全量预缓存（整包 1.5 MB，一次拉完）→ 之后 cache-first。
- * 更新：build.py 会把 202611141328 换成构建时间，版本一变就换新缓存、删旧缓存。
+ * 更新：build.py 会把 1b112df16f73 换成构建时间，版本一变就换新缓存、删旧缓存。
  *
  * 注意：Service Worker 只在 https 或 localhost 下生效。
  * 用局域网 http://192.168.x.x 打开时不会注册，属于预期行为。
  */
-const V = "202611141328";
+const V = "1b112df16f73";
 const CACHE = "gotest-" + V;
 const ASSETS = [
   "./",
@@ -22,13 +22,19 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (e) => {
+  // 注意：这里故意不调用 skipWaiting()。
+  // 新版本先进入"等待"状态，由页面显示「有新版本」提示，
+  // 用户点了才通过 message 通知这里跳过等待、立即接管。
+  // 如果用户一直不点，等 App 被关掉、没有客户端时它也会自动接管。
   e.waitUntil(
-    caches.open(CACHE)
-      .then((c) => Promise.allSettled(
-        ASSETS.map((a) => c.add(new Request(a, { cache: "reload" })))
-      ))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then((c) => Promise.allSettled(
+      ASSETS.map((a) => c.add(new Request(a, { cache: "reload" })))
+    ))
   );
+});
+
+self.addEventListener("message", (e) => {
+  if (e.data === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {

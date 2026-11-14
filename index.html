@@ -20,7 +20,13 @@
 
 <div id="home">
   <h1>围棋级位测试6000题</h1>
-  <div class="sub">围棋级位题库 6124 题 · 十轮累计循环｜自由 / 题数 / 时间 三种节奏｜进度自动保存</div>
+  <div class="sub">6124 题 · 逢百重来十遍推进（每遍 100 题起，逐遍加 100）｜每天 15 分钟｜进度自动保存</div>
+
+  <div class="who">
+    <span class="wholab">当前练习</span>
+    <button id="whoBtn" class="whobtn"><b id="whoName">—</b><i>切换</i></button>
+  </div>
+  <div class="whoPanel hide" id="whoPanel"></div>
 <!--PWA-TIP-->
   <div class="tip hide" id="iosTip">点底部「分享」→「添加到主屏幕」，以后全屏打开、断网也能做</div>
 <!--/PWA-TIP-->
@@ -36,18 +42,18 @@
       <svg viewBox="0 0 100 100" class="ring">
         <circle cx="50" cy="50" r="42" class="ringbg"/>
         <circle id="ringfg" cx="50" cy="50" r="42" class="ringfg"/>
-        <text id="ringpct" x="50" y="48" class="rt1">0%</text>
-        <text x="50" y="64" class="rt2">本轮</text>
+        <text id="ringpct" x="50" y="46" class="rt1">0 题</text>
+        <text x="50" y="63" class="rt2">今天</text>
       </svg>
       <div class="proginfo">
-        <div class="row"><span>当前进度</span><span id="pinfo">—</span></div>
+        <div class="row"><span>第 <b id="ppass">1</b> / 10 遍</span><span id="pinfo">—</span></div>
         <div class="rounds" id="rounds"></div>
-        <div class="row"><span>本轮目标</span><span id="pgoal">—</span></div>
-        <div class="row"><span>今日已做</span><span id="ptoday">0 / 12 题</span></div>
+        <div class="row"><span>今日目标</span><span id="ptarget">—</span></div>
+        <div class="row"><span>首答正确率</span><span id="pfirst">—</span></div>
       </div>
     </div>
     <button class="btn" id="start">开始做题</button>
-    <button class="btn ghost" id="nextpass">这一轮做完了 → 进入下一轮</button>
+    <button class="btn ghost" id="nextpass">这一遍做完了 → 进入下一遍</button>
   </div>
 
   <div class="card">
@@ -72,8 +78,13 @@
         <button class="chip" data-n="100">100</button><button class="chip" data-n="200">200</button></span></div>
     <div class="row" id="rowTime"><span>每次时长（分钟）</span>
       <span><select id="selMin"><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option><option>45</option><option>60</option></select></span></div>
-    <div class="row"><span>复习轮只做错题（压缩模式）</span>
+    <div class="row"><span>跳过旧题重做（压缩模式，非老师方案）</span>
       <button class="btn ghost" style="width:auto;padding:6px 14px;margin:0" id="mode">严格模式</button></div>
+    <div class="row" style="margin-top:10px"><span>音效</span>
+      <span class="inline"><button class="chip on" id="sfxBtn">开</button>
+        <input id="sfxVol" type="range" min="0" max="100" step="5" value="45" title="音量">
+      </span></div>
+    <div class="hint">iPad 侧边静音键打开时不会响</div>
     <div class="row" style="margin-top:10px"><span>错题记录</span><span id="wcount">0 道</span></div>
     <button class="btn ghost" id="export">导出进度 JSON</button>
     <button class="btn ghost" id="import">导入进度 JSON（恢复备份）</button>
@@ -101,14 +112,18 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习</div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">1b112df16f73</span></div>
 </div>
+
+<!--PWA-UPDATE-->
+<div class="updateBar hide" id="updateBar">有新版本 · <b>点这里更新</b></div>
+<!--/PWA-UPDATE-->
 
 <script src="data.js"></script>
 <script src="app.js"></script>
 <!--PWA-SCRIPT-->
 <script>
-/* 装到主屏幕的两件事：iOS 上给一句引导；https 下注册离线缓存 */
+/* 三件事：iOS 引导加到主屏幕、注册离线缓存、发现新版本时给一条提示 */
 (function () {
   var ua = navigator.userAgent;
   var iOS = /iPad|iPhone|iPod/.test(ua) ||
@@ -118,11 +133,56 @@
   var tip = document.getElementById("iosTip");
   if (tip && iOS && !standalone) tip.classList.remove("hide");
 
-  if ("serviceWorker" in navigator && location.protocol === "https:") {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function () {});
-    });
+  var bar = document.getElementById("updateBar");
+  var supported = "serviceWorker" in navigator && location.protocol === "https:";
+  if (!supported) { if (bar) bar.parentNode.removeChild(bar); return; }
+
+  var waiting = null;      // 正在排队等接管的新版本
+  var asked = false;       // 用户是否点了"更新"
+
+  function showUpdate(reg) {
+    waiting = reg;
+    if (bar) bar.classList.remove("hide");
   }
+
+  if (bar) {
+    bar.onclick = function () {
+      if (waiting && waiting.waiting) {
+        asked = true;
+        waiting.waiting.postMessage("SKIP_WAITING");   // 通知 SW 立即接管
+      } else {
+        location.reload();                             // 没有等待中的版本，直接重载
+      }
+    };
+  }
+
+  // 新版本接管后重载页面，用户立刻看到新版
+  navigator.serviceWorker.addEventListener("controllerchange", function () {
+    if (asked) location.reload();
+  });
+
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").then(function (reg) {
+      // 已经有等待中的版本（比如上次没点就退出了）
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg);
+
+      reg.addEventListener("updatefound", function () {
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener("statechange", function () {
+          // controller 存在 = 这是升级，不是首次安装
+          if (nw.state === "installed" && navigator.serviceWorker.controller) showUpdate(reg);
+        });
+      });
+
+      // iOS 不会主动查更新，回到前台时补一次
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState !== "visible") return;
+        if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg);
+        reg.update().catch(function () {});
+      });
+    }).catch(function () {});
+  });
 })();
 </script>
 <!--/PWA-SCRIPT-->

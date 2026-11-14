@@ -1,21 +1,177 @@
 
-const KEY = new URLSearchParams(location.search).has("dev") ? "gotest_loop_dev" : "gotest_loop_v1";
+const BASE = new URLSearchParams(location.search).has("dev") ? "gotest_loop_dev" : "gotest_loop_v1";
 const DAILY = 20;           // 默认每日题数（设置里可填 5~2000）
+const RETRY_MAX = 3;        // 待重做的题最多插到队伍前面几条，避免卡住新内容
+const PKEY = BASE + "_profiles";
+const CKEY = BASE + "_current";
+
+/* ---------- 多档：一台设备多个孩子，各自一份完全独立的存档 ---------- */
+function profiles(){
+  let arr = [];
+  try{ arr = JSON.parse(localStorage.getItem(PKEY)) || []; }catch(e){}
+  if(!arr.length){
+    arr = [{id:"p1", name:"1 号"}];
+    localStorage.setItem(PKEY, JSON.stringify(arr));
+    // 首次升级：把原来的单档进度整份搬到 p1，老键原样保留（不清空，留作兜底）
+    const old = localStorage.getItem(BASE);
+    if(old && !localStorage.getItem(BASE + "::p1")) localStorage.setItem(BASE + "::p1", old);
+  }
+  return arr;
+}
+function saveProfiles(arr){ localStorage.setItem(PKEY, JSON.stringify(arr)); }
+function keyOf(id){ return BASE + "::" + id; }
+function pname(id){
+  const p = profiles().find(x => x.id === id);
+  return p ? p.name : id;
+}
+function curPid(){
+  const arr = profiles();
+  let id = localStorage.getItem(CKEY);
+  if(!id || !arr.some(p => p.id === id)){ id = arr[0].id; localStorage.setItem(CKEY, id); }
+  return id;
+}
+
+let PID = curPid();
+let KEY = keyOf(PID);
 let S = load();
 
+function switchProfile(id){
+  if(id === PID) return;
+  save();
+  PID = id; localStorage.setItem(CKEY, id); KEY = keyOf(id);
+  S = load(); renderHome();
+}
+function addProfile(name){
+  const arr = profiles();
+  const n = arr.reduce((m,p)=>Math.max(m, +String(p.id).replace("p","") || 0), 0) + 1;
+  const id = "p" + n;
+  arr.push({id, name: name || ("孩子 " + arr.length)});
+  saveProfiles(arr);
+  switchProfile(id);
+}
+function renameProfile(id, name){
+  const arr = profiles(); const p = arr.find(x => x.id === id);
+  if(p){ p.name = name; saveProfiles(arr); }
+}
+function delProfile(id){
+  const arr = profiles().filter(p => p.id !== id);
+  if(!arr.length) return;
+  localStorage.removeItem(keyOf(id));
+  saveProfiles(arr);
+  if(id === PID){
+    PID = arr[0].id; localStorage.setItem(CKEY, PID); KEY = keyOf(PID); S = load();
+  }
+  renderHome();
+}
+function esc(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- 音效：全部用 Web Audio 现场合成，不加载任何音频文件 ---------- */
+const SFX = (function(){
+  let ac = null;
+  function ctx(){
+    if(!ac){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return null;
+      try{ ac = new AC(); }catch(e){ return null; }
+    }
+    if(ac.state === "suspended"){ try{ ac.resume(); }catch(e){} }
+    return ac;
+  }
+  function on(){ return !S.sfx || S.sfx.on !== false; }
+  function vol(){ return S.sfx && typeof S.sfx.vol === "number" ? S.sfx.vol : 0.45; }
+  function ready(){ return on() && vol() > 0.001; }
+
+  /** 单音，可带滑音 */
+  function beep(type, f0, f1, dur, gain){
+    if(!ready()) return;
+    const c = ctx(); if(!c) return;
+    const t = c.currentTime;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    if(f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    const peak = Math.max(0.0002, gain * vol());
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
+
+  /** 棋子敲盘：一段噪声分多个带通叠加。
+   *  参数照 101 围棋网实测（落子主频 1925Hz、频谱重心 5515Hz、400Hz 以下几乎无能量、
+   *  起音 10ms、峰后 60ms 衰减到 10%），所以是"脆"而不是"咚"。
+   *  bands: [[中心频率, Q, 相对增益], ...] */
+  function knock(bands, dur, gain){
+    if(!ready()) return;
+    const c = ctx(); if(!c) return;
+    const n = Math.max(1, Math.floor(c.sampleRate * dur));
+    const buf = c.createBuffer(1, n, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/n, 3);
+    bands.forEach(function(band){
+      const src = c.createBufferSource(); src.buffer = buf;
+      const bp = c.createBiquadFilter();
+      bp.type = "bandpass"; bp.frequency.value = band[0]; bp.Q.value = band[1];
+      const g = c.createGain(); g.gain.value = gain * band[2] * vol();
+      src.connect(bp); bp.connect(g); g.connect(c.destination);
+      src.start();
+    });
+  }
+
+  return {
+    unlock(){ ctx(); },                                    // 必须在用户手势里调一次，iOS 才允许发声
+    // 黑子落下：1900Hz 主体 + 5.2kHz 空气层，照 101 实测的"脆亮"质感
+    stone(){ knock([[1900, 0.9, 1.0], [5200, 1.2, 0.04]], 0.105, 0.52); },
+    // 白棋应手：同一质感，略高略轻，让孩子听出"对方下了一手"
+    white(){ knock([[2300, 0.9, 1.0], [6000, 1.2, 0.04]], 0.090, 0.34); },
+    ok(){                                                  // 答对：两个上行音，音量压到很轻
+      setTimeout(()=>beep("sine", 880, 880, 0.10, 0.12), 120);
+      setTimeout(()=>beep("sine", 1320, 1320, 0.15, 0.10), 215);
+    },
+    done(){                                                 // 本次做完：三音上行
+      [660, 880, 1100].forEach((f,i)=>setTimeout(()=>beep("sine", f, f, 0.11, 0.16), i*95));
+    },
+    timeup(){                                               // 时间到：两音下行
+      beep("sine", 700, 700, 0.15, 0.16);
+      setTimeout(()=>beep("sine", 470, 470, 0.22, 0.14), 170);
+    }
+  };
+})();
+
+function fresh(){
+  return {v:3, lv:0, mode:"strict", dailyMode:"time", dailyCount:DAILY, dailyMin:15,
+          st:{}, wrong:{}, retry:{}, q:{}, pace:DAILY, sfx:{on:true, vol:0.45},
+          today:{d:"", n:0}, history:{}};
+}
 function load(){
   try{
     const o = JSON.parse(localStorage.getItem(KEY));
-    if(o){ o.v = 2; o.dailyMode = o.dailyMode || "count"; o.dailyCount = o.dailyCount || DAILY;
-           o.dailyMin = o.dailyMin || 15; o.history = o.history || {}; return o; }
+    if(o){
+      // v1/v2 -> v3：老师方案要求每天 15 分钟。只在题数还是默认值时才迁移，不覆盖手动设置
+      if(!o.v || o.v < 3){
+        if(o.dailyMode === "count" && (+o.dailyCount || DAILY) === DAILY) o.dailyMode = "time";
+      }
+      o.v = 3;
+      o.dailyMode = o.dailyMode || "time";
+      o.dailyCount = o.dailyCount || DAILY;
+      o.dailyMin = o.dailyMin || 15;
+      o.history = o.history || {};
+      o.q = o.q || {};          // 每题首答记录 [首答对错, 累计错点, 首手耗时ms, 最近做对日期]
+      o.retry = o.retry || {};  // 待重做（点了错因看答案的题）
+      o.pace = o.pace || DAILY; // 15 分钟大致能做多少题，滚动更新
+      o.sfx = o.sfx || {on:true, vol:0.45};
+      return o;
+    }
   }catch(e){}
-  return {v:2, lv:0, mode:"strict", dailyMode:"count", dailyCount:DAILY, dailyMin:15,
-          st:{}, wrong:{}, today:{d:"", n:0}, history:{}};
+  return fresh();
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function dateKey(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
-/** 每完成一题记一次：同时更新今日计数和活跃地图的按日历史 */
+/** 每答对一题记一次：同时更新今日计数和活跃地图的按日历史 */
 function markDone(){
   if(S.today.d !== today()) S.today = {d: today(), n: 0};
   S.today.n++;
@@ -23,45 +179,137 @@ function markDone(){
   S.history[today()] = S.today.n;
 }
 function lvSt(i){
-  if(!S.st[i]) S.st[i] = {pass:1, done:{}, ok:0, bad:0};
+  if(!S.st[i]) S.st[i] = {pass:1, done:{}};
   return S.st[i];
 }
 function goalOf(i, pass){ return Math.min(100*pass, DATA[i].n); }
 function wrongOf(i){
   const o = S.wrong[i] || {}; return Object.keys(o).map(Number).sort((a,b)=>a-b);
 }
-function planList(i){    // 本轮要做哪些题号（0-based）
-  const st = lvSt(i), N = DATA[i].n, g = goalOf(i, st.pass);
+/** 每题的首答记录：[首答是否对(1/0/null未判), 累计错点, 首手耗时ms, 最近做对日期] */
+function qRec(lv, idx){
+  if(!S.q[lv]) S.q[lv] = {};
+  let r = S.q[lv][idx];
+  if(!r){ r = [null, 0, 0, 0]; S.q[lv][idx] = r; }
+  return r;
+}
+/** 首答正确率——唯一能区分"会"和"记得上次点这里"的指标 */
+function firstStat(lv){
+  const o = S.q[lv] || {};
+  let okN = 0, allN = 0;
+  for(const k in o){ const f = o[k][0]; if(f === 1 || f === 0){ allN++; if(f === 1) okN++; } }
+  return allN ? {rate: Math.round(okN/allN*100), okN, allN} : null;
+}
+/** 本轮要做哪些题号（0-based）：待重做的插到最前面，其余按题号 */
+function planList(i){
+  const st = lvSt(i), g = goalOf(i, st.pass);
   const idx = []; for(let k=0;k<g;k++) idx.push(k);
+  let base;
   if(S.mode === "compact" && st.pass > 1){
     const w = new Set(wrongOf(i));
-    return idx.filter(k => w.has(k) || k >= goalOf(i, st.pass-1));
+    base = idx.filter(k => w.has(k) || k >= goalOf(i, st.pass-1));
+  } else {
+    base = idx;
   }
-  return idx;
+  const rt = S.retry[i] || {};
+  const first = base.filter(k => rt[k]).slice(0, RETRY_MAX);
+  if(!first.length) return base;
+  const seen = new Set(first);
+  return first.concat(base.filter(k => !seen.has(k)));
 }
 
 /* ---------- 首页 ---------- */
+function dailyTargetText(){
+  if(S.dailyMode === "count") return S.dailyCount + " 题";
+  if(S.dailyMode === "time")  return S.dailyMin + " 分钟 · 约 " + S.pace + " 题";
+  return "不限量";
+}
+/** 顶部"当前练习"那一行 + 切换面板 */
+function renderWho(){
+  const cur = curPid();
+  document.getElementById("whoName").textContent = pname(cur);
+  const arr = profiles();
+  let html = "";
+  arr.forEach(p=>{
+    let sub = "还没开始";
+    try{
+      const o = JSON.parse(localStorage.getItem(keyOf(p.id)) || "null");
+      if(o && o.st){
+        let done = 0;
+        Object.keys(o.st).forEach(k=>{ done += Object.keys(o.st[k].done || {}).length; });
+        const pass = (o.st[0] && o.st[0].pass) || 1;
+        sub = `第 ${pass} 遍 · 累计 ${done} 题`;
+      }
+    }catch(e){}
+    html += `<div class="prow${p.id === cur ? " on" : ""}" data-id="${p.id}">` +
+            `<span class="pn">${esc(p.name)}</span><span class="pm">${sub}</span>` +
+            `<button class="px" data-a="rename">改名</button>` +
+            (arr.length > 1 ? `<button class="px" data-a="del">删除</button>` : "") +
+            `</div>`;
+  });
+  html += `<button class="padd" id="padd">＋ 新增一个孩子</button>`;
+  const panel = document.getElementById("whoPanel");
+  panel.innerHTML = html;
+
+  panel.querySelectorAll(".prow").forEach(row=>{
+    const id = row.dataset.id;
+    row.onclick = (ev)=>{
+      const a = ev.target.dataset ? ev.target.dataset.a : "";
+      if(a === "rename"){
+        const n = prompt("把「" + pname(id) + "」改成什么名字？", pname(id));
+        if(n && n.trim()){ renameProfile(id, n.trim()); renderHome(); }
+        return;
+      }
+      if(a === "del"){
+        if(confirm("删除「" + pname(id) + "」的全部进度？无法恢复。")) delProfile(id);
+        return;
+      }
+      switchProfile(id);
+      panel.classList.add("hide");
+    };
+  });
+  const add = document.getElementById("padd");
+  if(add) add.onclick = ()=>{
+    const n = prompt("新孩子的名字（用来区分各自的进度）", "");
+    if(n === null) return;
+    addProfile((n || "").trim());
+    panel.classList.add("hide");
+  };
+}
 function renderHome(){
+  renderWho();
   const box = document.getElementById("lvbox"); box.innerHTML = "";
   DATA.forEach((L,i)=>{
     const st = lvSt(i), g = goalOf(i, st.pass), d = Object.keys(st.done).length;
     const b = document.createElement("button");
     b.className = (i===S.lv ? "on":"");
-    b.innerHTML = `<span class="n">${L.lb}</span><span class="m">${L.n} 题 · 第${st.pass}轮</span>` +
+    b.innerHTML = `<span class="n">${L.lb}</span><span class="m">${L.n} 题 · 第${st.pass}遍</span>` +
                   `<span class="lvb"><i style="width:${st.pass*10}%"></i></span>`;
     b.onclick = ()=>{ S.lv=i; save(); renderHome(); };
     box.appendChild(b);
   });
+
+  if(S.today.d !== today()){ S.today = {d: today(), n: 0}; save(); }
+
   const st = lvSt(S.lv), L = DATA[S.lv], g = goalOf(S.lv, st.pass);
   const list = planList(S.lv).filter(k=>!st.done[k]);
   const doneN = Object.keys(st.done).length;
-  const pct = g ? Math.min(100, Math.round(doneN / g * 100)) : 0;
+
+  // 环形 = 今天做了多少题 / 15 分钟大致能做多少题（滚动估计）
+  const pct = Math.min(100, Math.round(S.today.n / Math.max(1, S.pace) * 100));
   const C = 2 * Math.PI * 42;
   const fg = document.getElementById("ringfg");
   fg.setAttribute("stroke-dasharray", (C*pct/100).toFixed(1) + " " + C.toFixed(1));
-  document.getElementById("ringpct").textContent = pct + "%";
-  document.getElementById("pinfo").textContent = `${L.lb} · 第 ${st.pass} / 10 轮`;
-  document.getElementById("pgoal").textContent = `${g} 题（第 1–${g} 题）· 未做 ${list.length} 题`;
+  document.getElementById("ringpct").textContent = S.today.n + " 题";
+
+  document.getElementById("ppass").textContent = st.pass;
+  document.getElementById("pinfo").textContent = `${L.lb} · 已完成 ${doneN} / ${g} 题 · 未做 ${list.length}`;
+  document.getElementById("ptarget").textContent = dailyTargetText();
+
+  const fs = firstStat(S.lv);
+  document.getElementById("pfirst").textContent =
+      fs ? `${fs.rate}%（${fs.okN}/${fs.allN}）` : "还没有记录";
+
   const rb = document.getElementById("rounds"); rb.innerHTML = "";
   for(let k=1;k<=10;k++){
     const d = document.createElement("div");
@@ -69,15 +317,14 @@ function renderHome(){
     d.textContent = k < st.pass ? "✓" : k;
     rb.appendChild(d);
   }
-  if(S.today.d !== today()){ S.today = {d: today(), n: 0}; save(); }
-  const plan = S.dailyMode === "count" ? S.dailyCount + " 题"
-             : (S.dailyMode === "time" ? S.dailyMin + " 分钟" : "不限量");
-  document.getElementById("ptoday").textContent = `${S.today.n} 题 ／ 今天计划 ${plan}`;
+
   document.getElementById("wcount").textContent = wrongOf(S.lv).length + " 道";
-  document.getElementById("mode").textContent = S.mode==="strict" ? "严格模式" : "压缩模式";
+  document.getElementById("mode").textContent =
+      S.mode==="strict" ? "严格模式（老师方案）" : "压缩模式（跳过旧题）";
   syncDaily();
+  syncSfx();
   document.getElementById("start").disabled = list.length === 0;
-  document.getElementById("start").textContent = list.length ? "开始做题" : "这一轮已完成，点下面进入下一轮";
+  document.getElementById("start").textContent = list.length ? "开始做题" : "这一遍已完成，点下面进入下一遍";
   document.getElementById("nextpass").classList.toggle("hide", list.length > 0);
   renderCalendar();
 }
@@ -114,6 +361,13 @@ function renderCalendar(){
   document.getElementById("msfill").style.width = Math.min(100, s/28*100).toFixed(1) + "%";
   document.querySelectorAll(".msline b").forEach(b => b.classList.toggle("on", s >= +b.dataset.d));
 }
+function syncSfx(){
+  const on = !S.sfx || S.sfx.on !== false;
+  const b = document.getElementById("sfxBtn");
+  b.textContent = on ? "开" : "关";
+  b.classList.toggle("on", on);
+  document.getElementById("sfxVol").value = Math.round((S.sfx && S.sfx.vol != null ? S.sfx.vol : 0.45) * 100);
+}
 function syncDaily(){
   document.getElementById("rowCount").style.display = S.dailyMode==="count" ? "flex" : "none";
   document.getElementById("rowTime").style.display = S.dailyMode==="time" ? "flex" : "none";
@@ -130,7 +384,7 @@ document.getElementById("mFree").onclick = ()=>{ S.dailyMode="free"; save(); ren
 document.getElementById("mCount").onclick = ()=>{ S.dailyMode="count"; save(); renderHome(); };
 document.getElementById("mTime").onclick = ()=>{ S.dailyMode="time"; save(); renderHome(); };
 document.getElementById("numCount").onchange = (e)=>{
-  let v = Math.round(+e.target.value || 20);
+  let v = Math.round(+e.target.value || DAILY);
   v = Math.max(5, Math.min(2000, v));
   S.dailyCount = v; save(); renderHome();
 };
@@ -138,17 +392,37 @@ document.querySelectorAll(".chip").forEach(c=>{
   c.onclick = ()=>{ S.dailyCount = +c.dataset.n; save(); renderHome(); };
 });
 document.getElementById("selMin").onchange = (e)=>{ S.dailyMin = +e.target.value; save(); renderHome(); };
-document.getElementById("mode").onclick = ()=>{ S.mode = S.mode==="strict"?"compact":"strict"; save(); renderHome(); };
+document.getElementById("sfxBtn").onclick = ()=>{
+  S.sfx = S.sfx || {on:true, vol:0.45};
+  S.sfx.on = !S.sfx.on; save(); renderHome();
+  if(S.sfx.on) SFX.stone();
+};
+document.getElementById("sfxVol").oninput = (e)=>{
+  S.sfx = S.sfx || {on:true, vol:0.45};
+  S.sfx.vol = Math.max(0, Math.min(100, +e.target.value)) / 100;
+  const b = document.getElementById("sfxBtn");
+  b.textContent = S.sfx.vol > 0.001 ? "开" : "关";
+};
+document.getElementById("sfxVol").onchange = ()=>{ save(); SFX.stone(); };
+document.getElementById("mode").onclick = ()=>{
+  if(S.mode === "strict"){
+    if(!confirm("压缩模式会跳过旧题重做，只做错题和本遍新增。\n老师的方法是「逢百重来」——每遍都要把旧题重做一遍。\n确定要切换吗？")) return;
+    S.mode = "compact";
+  } else {
+    S.mode = "strict";
+  }
+  save(); renderHome();
+};
 document.getElementById("nextpass").onclick = ()=>{
   const st = lvSt(S.lv);
-  if(st.pass >= 10){ alert("这一级 10 轮已走完，本级毕业 🎉"); return; }
-  if(!confirm("确认本轮结束，进入第 " + (st.pass+1) + " 轮？")) return;
+  if(st.pass >= 10){ alert("这一级 10 遍已走完，本级毕业 🎉"); return; }
+  if(!confirm("确认本遍结束，进入第 " + (st.pass+1) + " 遍？\n下一遍要完成前 " + (100*(st.pass+1)) + " 题。")) return;
   st.pass++; st.done = {}; save(); renderHome();
 };
 document.getElementById("export").onclick = ()=>{
   const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = "gotest_progress_"+today()+".json"; a.click();
+  a.download = "gotest_" + pname(PID).replace(/[\\/:*?"<>|\s]+/g, "_") + "_" + today() + ".json"; a.click();
 };
 document.getElementById("import").onclick = ()=> document.getElementById("impfile").click();
 document.getElementById("impfile").onchange = (e)=>{
@@ -158,10 +432,11 @@ document.getElementById("impfile").onchange = (e)=>{
     try{
       const o = JSON.parse(rd.result);
       if(!o || !o.st) throw new Error("bad");
-      if(!confirm("导入会覆盖当前进度，确定吗？")) { e.target.value=""; return; }
-      o.v = 2; o.dailyMode = o.dailyMode || "count";
+      if(!confirm("导入会覆盖「" + pname(PID) + "」当前的进度，确定吗？")) { e.target.value=""; return; }
+      o.v = 3; o.dailyMode = o.dailyMode || "time";
       o.dailyCount = o.dailyCount || DAILY; o.dailyMin = o.dailyMin || 15;
-      o.history = o.history || {};
+      o.history = o.history || {}; o.q = o.q || {}; o.retry = o.retry || {};
+      o.pace = o.pace || DAILY;
       S = o; save(); renderHome();
       alert("进度已恢复");
     }catch(err){ alert("导入失败：不是有效的进度文件"); }
@@ -173,22 +448,31 @@ document.getElementById("impfile").onchange = (e)=>{
 /* ---------- 做题 ---------- */
 let queue = [], cur = null, cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
 let timeUp = false, deadline = 0, tickId = null;
+let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
+/** 会话收尾：把这次 15 分钟实际做了多少题，滚动并入 pace 估计 */
+function endSession(){
+  if(sessN > 0 && S.dailyMode === "time"){
+    S.pace = Math.max(5, Math.round(S.pace*0.6 + sessN*0.4));
+    save();
+  }
+}
 function tick(){
   const left = Math.max(0, deadline - Date.now());
   const m = Math.floor(left/60000), s = Math.floor(left%60000/1000);
   document.getElementById("clock").textContent = left > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
   if(left <= 0 && !timeUp){
-    timeUp = true; stopTimer(); queue = [];
+    timeUp = true; stopTimer(); queue = []; endSession(); SFX.timeup();
     document.getElementById("fb").className = "fb ok";
     document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工";
   }
 }
 document.getElementById("start").onclick = ()=>{
+  SFX.unlock();
   const st = lvSt(S.lv);
   const all = planList(S.lv).filter(k => !st.done[k]);
-  ok = 0; bad = 0; timeUp = false; stopTimer();
+  ok = 0; bad = 0; sessN = 0; timeUp = false; requeued = {}; stopTimer();
   document.getElementById("clock").textContent = "";
   if(S.dailyMode === "count"){
     queue = all.slice(0, S.dailyCount);
@@ -199,15 +483,16 @@ document.getElementById("start").onclick = ()=>{
   } else {
     queue = all.slice();          // 自由模式：不限量，做到点返回
   }
+  const st2 = lvSt(S.lv);
   document.getElementById("phead").textContent =
-      DATA[S.lv].lb + " · 第 " + lvSt(S.lv).pass + " 轮 · " +
+      DATA[S.lv].lb + " · 第 " + st2.pass + " 遍 · " +
       (S.dailyMode==="free" ? "自由" : (S.dailyMode==="count" ? S.dailyCount+" 题" : S.dailyMin+" 分钟"));
   document.getElementById("home").classList.add("hide");
   document.getElementById("play").classList.remove("hide");
   nextQ();
 };
 document.getElementById("quit").onclick = ()=>{
-  stopTimer();
+  stopTimer(); endSession();
   document.getElementById("clock").textContent = "";
   document.getElementById("play").classList.add("hide");
   document.getElementById("home").classList.remove("hide");
@@ -216,9 +501,10 @@ document.getElementById("quit").onclick = ()=>{
 function nextQ(){
   if(timeUp){ document.getElementById("fb").className="fb ok";
               document.getElementById("fb").textContent="时间到，点右上「返回」看今天的进度"; return; }
-  if(queue.length === 0){ document.getElementById("fb").textContent = "本次做完啦，回去看进度"; document.getElementById("fb").className="fb ok"; return; }
+  if(queue.length === 0){ SFX.done(); document.getElementById("fb").textContent = "本次做完啦，回去看进度"; document.getElementById("fb").className="fb ok"; return; }
   const idx = queue.shift();
   cur = DATA[S.lv].p[idx]; cur._i = idx; answered = false; step = 0; placed = [];
+  firstJudged = false; t0 = Date.now();
   document.getElementById("iq").textContent = "第 " + (idx+1) + " 题";
   document.getElementById("ir").textContent = ok;
   document.getElementById("iw").textContent = bad;
@@ -265,8 +551,11 @@ function draw(){
   svg._c0 = c0; svg._r0 = r0;
 }
 function solved(){
-  answered = true; ok++;
+  answered = true; ok++; sessN++; SFX.ok();
   const st = lvSt(S.lv); if(!st.done[cur._i]) st.done[cur._i] = 1;
+  const r = qRec(S.lv, cur._i);
+  r[3] = today();
+  if(S.retry[S.lv]) delete S.retry[S.lv][cur._i];
   markDone();
   document.getElementById("ir").textContent = ok;
   document.getElementById("fb").className = "fb ok";
@@ -282,9 +571,18 @@ function onTap(e){
   const rr = r + el._r0, cc = c + el._c0;
   if(rr<0||rr>18||cc<0||cc>18) return;
   const q = cur.q || [], exp = q[step];
-  if(exp && exp[0]===rr && exp[1]===cc){
-    placed.push([rr, cc, 1]); step++;
-    if(step < q.length){ placed.push([q[step][0], q[step][1], 2]); step++; }
+  const hit = !!(exp && exp[0]===rr && exp[1]===cc);
+
+  // 首答判定：只认本会话的第一手。这是"重新算对"和"记得上次点这里"的唯一分界
+  if(!firstJudged && q.length){
+    firstJudged = true;
+    const rec = qRec(S.lv, cur._i);
+    if(rec[0] === null){ rec[0] = hit ? 1 : 0; rec[2] = Date.now() - t0; save(); }
+  }
+
+  if(hit){
+    placed.push([rr, cc, 1]); step++; SFX.stone();
+    if(step < q.length){ placed.push([q[step][0], q[step][1], 2]); step++; setTimeout(()=>SFX.white(), 130); }
     if(step >= q.length){ draw(); solved(); }
     else {
       draw();
@@ -293,12 +591,14 @@ function onTap(e){
     }
   } else {
     bad++;
+    qRec(S.lv, cur._i)[1]++;
+    save();
     document.getElementById("iw").textContent = bad;
     const marks = document.getElementById("marks");
     const x = ox + c*cell, y = oy + r*cell;
     marks.innerHTML = `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="#1a1a1a" opacity=".5"/>`;
     document.getElementById("fb").className = "fb no";
-    document.getElementById("fb").textContent = "不对，再想想（想不出就选下面错因，会标出正解）";
+    document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以选下面错因看正解，但这题不算完成）";
     document.getElementById("types").classList.remove("hide");
   }
 }
@@ -306,6 +606,9 @@ document.querySelectorAll("#types button").forEach(b=>{
   b.onclick = ()=>{
     if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
     S.wrong[S.lv][cur._i] = b.dataset.t;
+    // 看答案 = 这题没做出来：不计完成、不计今日、不进活跃地图，转为待重做
+    if(!S.retry[S.lv]) S.retry[S.lv] = {};
+    S.retry[S.lv][cur._i] = 1;
     answered = true;
     const a = (cur.q && cur.q[0]);
     if(a){
@@ -314,10 +617,17 @@ document.querySelectorAll("#types button").forEach(b=>{
       const y = oy + (a[0]-document.getElementById("svg")._r0)*cell;
       marks.innerHTML += `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="none" stroke="#c0392b" stroke-width="3"/>`;
     }
-    const st = lvSt(S.lv); st.done[cur._i] = 1; markDone();
-    document.getElementById("fb").textContent = "已记错（" + b.dataset.t + "），红圈是正解。点棋盘继续。";
+    // 本会话内再出现一次（只重排一次，避免死循环）
+    if(!timeUp && !requeued[cur._i]){ requeued[cur._i] = 1; queue.push(cur._i); }
+    document.getElementById("fb").textContent = "已记错（" + b.dataset.t + "），红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。";
     document.getElementById("types").classList.add("hide");
     save();
   };
 });
 renderHome();
+
+/* 切换面板的开关 */
+document.getElementById("whoBtn").onclick = ()=>{
+  const p = document.getElementById("whoPanel");
+  p.classList.toggle("hide");
+};
