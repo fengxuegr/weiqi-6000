@@ -619,6 +619,44 @@ async function handleIncomingHash(){
 /** 调试与测试用：把编解码挂到 window */
 window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode };
 
+/* ---------- 手动设置进度（换机、跳着做、重置某一档） ---------- */
+function fillManualLevels(){
+  const sel = document.getElementById("mLevel");
+  if(sel.options.length) return;
+  DATA.forEach((L, i)=>{
+    const o = document.createElement("option");
+    o.value = String(i); o.textContent = L.lb + "（" + L.n + " 题）";
+    sel.appendChild(o);
+  });
+}
+function syncManual(){
+  const lv = +document.getElementById("mLevel").value || 0;
+  const pass = Math.max(1, Math.min(10, +document.getElementById("mPass").value || 1));
+  const cap = Math.min(100 * pass, DATA[lv].n);
+  const md = document.getElementById("mDone");
+  md.max = String(cap);
+  document.getElementById("mHint").textContent =
+      "当前可填 0–" + cap + " 题（第 " + pass + " 遍要做满 " + cap + " 题）";
+}
+document.getElementById("mLevel").onchange = syncManual;
+document.getElementById("mPass").onchange = syncManual;
+document.getElementById("mApply").onclick = ()=>{
+  const lv = Math.max(0, Math.min(DATA.length-1, +document.getElementById("mLevel").value || 0));
+  const pass = Math.max(1, Math.min(10, +document.getElementById("mPass").value || 1));
+  const cap = Math.min(100 * pass, DATA[lv].n);
+  let k = Math.round(+document.getElementById("mDone").value || 0);
+  k = Math.max(0, Math.min(cap, k));
+  if(!confirm("把「" + pname(PID) + "」的 " + DATA[lv].lb + " 设为：第 " + pass + " 遍、第 1–" + k + " 题已完成。\n该档现有的完成记录会被覆盖，确定吗？")) return;
+  S.lv = lv;
+  const st = lvSt(lv);
+  st.pass = pass;
+  st.done = {};
+  for(let i=0;i<k;i++) st.done[i] = 1;
+  S.sess = null;                 // 旧会话快照作废
+  save(); renderHome();
+  document.getElementById("mHint").textContent = "已设为：" + DATA[lv].lb + " · 第 " + pass + " 遍 · 已完成 " + k + " 题";
+};
+
 document.getElementById("mkCode").onclick = async ()=>{
   const hint = document.getElementById("codeHint");
   try{
@@ -941,3 +979,5 @@ document.addEventListener("visibilitychange", ()=>{
 /* 扫码打开本页时，hash 里带进度码 → 自动尝试导入 */
 handleIncomingHash();
 window.addEventListener("hashchange", handleIncomingHash);
+fillManualLevels();
+syncManual();

@@ -2,12 +2,12 @@
  *
  * 目标：装到主屏幕之后，断网也能做题。
  * 策略：安装时全量预缓存（整包 1.5 MB，一次拉完）→ 之后 cache-first。
- * 更新：build.py 会把 f21e9c6c2ddb 换成构建时间，版本一变就换新缓存、删旧缓存。
+ * 更新：build.py 会把 a1b773f9f9fe 换成构建时间，版本一变就换新缓存、删旧缓存。
  *
  * 注意：Service Worker 只在 https 或 localhost 下生效。
  * 用局域网 http://192.168.x.x 打开时不会注册，属于预期行为。
  */
-const V = "f21e9c6c2ddb";
+const V = "a1b773f9f9fe";
 const CACHE = "gotest-" + V;
 const ASSETS = [
   "./",
