@@ -187,3 +187,7 @@ input[type=range]{width:96px;accent-color:#b8763a;vertical-align:middle}
 .wrow .wr{flex:1;color:#8a5a2b}
 .wact{display:flex;gap:8px;padding:9px 10px;background:#fdfbf6;border-top:1px solid #f1ece2}
 .wact .chip{flex:1}
+
+/* 行内小链接按钮（如「重置」） */
+.linkBtn{border:0;background:none;padding:2px 4px;color:#b8763a;font-family:inherit;
+  font-size:12px;text-decoration:underline;cursor:pointer;-webkit-tap-highlight-color:transparent}
