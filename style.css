@@ -171,3 +171,9 @@ input[type=range]{width:96px;accent-color:#b8763a;vertical-align:middle}
   font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;resize:vertical}
 .chk{display:flex;align-items:center;gap:6px;font-size:12px;color:#7a6a56;margin:6px 0 4px}
 .chk input{accent-color:#b8763a}
+
+/* ---------- 进度码二维码 ---------- */
+.qrBox{margin:10px 0 4px;padding:10px;background:#fff;border:1px solid #e2d8c6;border-radius:10px;
+  display:flex;justify-content:center}
+.qrBox svg{width:100%;max-width:300px;height:auto;display:block}
+.qrHint{font-size:11.5px;color:#9a8b78;text-align:center;margin-bottom:8px}

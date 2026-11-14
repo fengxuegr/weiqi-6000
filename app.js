@@ -458,11 +458,65 @@ document.getElementById("nextpass").onclick = ()=>{
  * 传：遍数、做过哪些题、待重做、模式与时长设置（可选错题记录）
  * 不传：活跃地图 history、首答记录 q、今日计数 today、会话快照 sess、音效 pace
  * 实测（每档做 300 题）：核心 1.0 KB、含错题 1.9 KB；完整包 8.9 KB */
+/* 紧凑编码：done 通常是「0..N 连成一片」，存 1000 个键太浪费。
+ * 改成 [遍数, 前沿, 缺口列表]；若缺口比题目还多（极端稀疏），用 [遍数, -1, 题号列表]。
+ * 实测：单档 300 题 988 → 160 字符；六档各 1000 题 3404 → 180 字符。 */
+function packSt(){
+  const out = {};
+  Object.keys(S.st || {}).forEach(k=>{
+    const v = S.st[k] || {};
+    const ids = Object.keys(v.done || {}).map(Number).sort((a,b)=>a-b);
+    if(!ids.length){ out[k] = [v.pass || 1, 0]; return; }
+    const front = ids[ids.length-1] + 1;
+    const seen = new Set(ids);
+    const holes = [];
+    for(let i=0;i<front;i++) if(!seen.has(i)) holes.push(i);
+    if(holes.length > ids.length) out[k] = [v.pass || 1, -1, ids];   // 稀疏时反而存题号更省
+    else out[k] = holes.length ? [v.pass || 1, front, holes] : [v.pass || 1, front];
+  });
+  return out;
+}
+function unpackSt(o){
+  const out = {};
+  Object.keys(o || {}).forEach(k=>{
+    const v = o[k];
+    if(!Array.isArray(v)){ out[k] = {pass: (v && v.pass) || 1, done: Object.assign({}, (v && v.done) || {})}; return; }
+    const pass = v[0] || 1, done = {};
+    if(v[1] === -1){ (v[2] || []).forEach(i=>{ done[i] = 1; }); }
+    else {
+      const front = v[1] || 0, holes = new Set(v[2] || []);
+      for(let i=0;i<front;i++) if(!holes.has(i)) done[i] = 1;
+    }
+    out[k] = {pass, done};
+  });
+  return out;
+}
+function packIdx(map){
+  const out = {};
+  Object.keys(map || {}).forEach(k=>{ out[k] = Object.keys(map[k] || {}).map(Number).sort((a,b)=>a-b); });
+  return out;
+}
+function unpackIdx(o){
+  const out = {};
+  Object.keys(o || {}).forEach(k=>{
+    const v = o[k], m = {};
+    if(Array.isArray(v)) v.forEach(i=>{ m[i] = 1; });
+    else Object.keys(v || {}).forEach(i=>{ m[i] = 1; });
+    out[k] = m;
+  });
+  return out;
+}
 function makePortable(withWrong){
   const o = {v:3, kind:"portable", at:Date.now(), lv:S.lv, mode:S.mode,
              dailyMode:S.dailyMode, dailyCount:S.dailyCount, dailyMin:S.dailyMin,
-             st:S.st, retry:S.retry};
-  if(withWrong) o.wrong = S.wrong;
+             st:packSt(), retry:packIdx(S.retry)};
+  if(withWrong){
+    const w = {};
+    Object.keys(S.wrong || {}).forEach(k=>{
+      w[k] = Object.keys(S.wrong[k] || {}).map(Number).map(i=>[i, S.wrong[k][i]]);
+    });
+    o.wrong = w;
+  }
   return JSON.stringify(o);
 }
 function applyPortable(o){
@@ -472,9 +526,18 @@ function applyPortable(o){
   S.dailyMode = o.dailyMode || "time";
   S.dailyCount = +o.dailyCount || DAILY;
   S.dailyMin = +o.dailyMin || 10;
-  S.st = o.st || {};
-  S.retry = o.retry || {};
-  if(o.wrong) S.wrong = o.wrong;
+  S.st = unpackSt(o.st || {});
+  S.retry = unpackIdx(o.retry || {});
+  if(o.wrong){
+    const w = {};
+    Object.keys(o.wrong).forEach(k=>{
+      const v = o.wrong[k], m = {};
+      if(Array.isArray(v)) v.forEach(p=>{ if(Array.isArray(p)) m[p[0]] = p[1]; else m[p] = "气数"; });
+      else Object.assign(m, v);      // 旧格式
+      w[k] = m;
+    });
+    S.wrong = w;
+  }
   S.sess = null;                 // 旧会话快照作废，避免和搬来的进度打架
   save();
 }
@@ -507,6 +570,52 @@ async function decodeCode(code){
   }
   return new TextDecoder().decode(bytes);
 }
+/** 把进度码画成二维码。码里塞的是「带 hash 的 URL」，另一台扫了直接打开本页并自动导入。 */
+function showQr(code){
+  const box = document.getElementById("qrBox");
+  const tip = document.getElementById("qrHint");
+  if(!box) return;
+  const hideAll = ()=>{ box.classList.add("hide"); if(tip) tip.classList.add("hide"); };
+  if(typeof qrcode !== "function"){ hideAll(); return; }
+  const safe = code.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const url = location.origin + location.pathname + "#p=" + safe;
+  try{
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    box.innerHTML = qr.createSvgTag(4, 2);
+    box.classList.remove("hide");
+    if(tip) tip.classList.remove("hide");
+  }catch(e){ hideAll(); }
+}
+
+/** 扫码打开本页时，hash 里带着另一台的进度码 → 问一句再导入 */
+let hashBusy = false;
+async function handleIncomingHash(){
+  if(hashBusy) return;
+  const hit = /#p=(GQ1[GP]:[A-Za-z0-9\-_]+)/.exec(location.hash || "");
+  if(!hit) return;
+  hashBusy = true;
+  try{
+    const mm = /^(GQ1[GP]:)([A-Za-z0-9\-_]+)$/.exec(hit[1]);
+    let body = mm[2].replace(/-/g, "+").replace(/_/g, "/");
+    while(body.length % 4) body += "=";
+    const o = JSON.parse(await decodeCode(mm[1] + body));
+    if(!o || o.kind !== "portable") throw new Error("这不是进度码");
+    const lb = (DATA[o.lv] && DATA[o.lv].lb) || "该级别";
+    const pass = ((o.st || {})[o.lv] || {}).pass || 1;
+    if(confirm("扫到另一台的进度：" + lb + " · 第 " + pass + " 遍。\n导入到「" + pname(PID) + "」并替换现有进度？")){
+      applyPortable(o); renderHome();
+      alert("已导入：" + lb + " · 第 " + pass + " 遍");
+    }
+  }catch(e){
+    alert("进度码无效：" + (e.message || e));
+  }finally{
+    try{ history.replaceState(null, "", location.pathname + location.search); }catch(err){}
+    hashBusy = false;
+  }
+}
+
 /** 调试与测试用：把编解码挂到 window */
 window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode };
 
@@ -517,7 +626,8 @@ document.getElementById("mkCode").onclick = async ()=>{
     const box = document.getElementById("codeBox");
     box.value = code; box.classList.remove("hide");
     document.getElementById("doImport").classList.add("hide");
-    hint.textContent = "已生成 " + code.length + " 个字符，发到微信再在另一台粘贴";
+    showQr(code);
+    hint.textContent = "已生成 " + code.length + " 个字符；可扫码，也可复制下面的码发到另一台";
     try{ await navigator.clipboard.writeText(code); hint.textContent += "（已复制）"; }
     catch(e){ box.focus(); box.select(); hint.textContent += "（请手动全选复制）"; }
   }catch(e){ hint.textContent = "生成失败：" + (e.message || e); }
@@ -525,6 +635,8 @@ document.getElementById("mkCode").onclick = async ()=>{
 document.getElementById("useCode").onclick = async ()=>{
   const box = document.getElementById("codeBox");
   box.value = ""; box.classList.remove("hide");
+  document.getElementById("qrBox").classList.add("hide");
+  document.getElementById("qrHint").classList.add("hide");
   document.getElementById("doImport").classList.remove("hide");
   document.getElementById("codeHint").textContent = "把另一台的进度码粘到上面，再点「确认导入」";
   try{
@@ -825,3 +937,7 @@ document.getElementById("pause").onclick = ()=>{
 document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState === "hidden") pauseSession();
 });
+
+/* 扫码打开本页时，hash 里带进度码 → 自动尝试导入 */
+handleIncomingHash();
+window.addEventListener("hashchange", handleIncomingHash);

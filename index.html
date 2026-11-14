@@ -92,10 +92,12 @@
     <div class="row" style="margin-top:14px"><span>备份 · 换设备</span></div>
     <button class="btn ghost" id="mkCode">生成进度码（复制后发到另一台）</button>
     <button class="btn ghost" id="useCode">粘贴进度码导入</button>
+    <div class="qrBox hide" id="qrBox"></div>
+    <div class="qrHint hide" id="qrHint">用另一台设备的相机 / 微信扫这个码，打开后点「导入」</div>
     <textarea id="codeBox" class="codeBox hide" rows="4" spellcheck="false"
               autocomplete="off" placeholder="把另一台生成的进度码粘贴到这里"></textarea>
     <button class="btn hide" id="doImport">确认导入</button>
-    <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会长一倍）</label>
+    <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会稍长一点）</label>
     <div class="hint" id="codeHint">进度只存在本机，建议每月生成一次留底。码里含遍数、做过哪些题、待重做题；不含活跃地图和首答记录</div>
   </div>
 </div>
@@ -123,13 +125,14 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">68950e3d9c2b</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">f21e9c6c2ddb</span></div>
 </div>
 
 <!--PWA-UPDATE-->
 <div class="updateBar hide" id="updateBar">有新版本 · <b>点这里更新</b></div>
 <!--/PWA-UPDATE-->
 
+<script src="vendor/qrcode.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 <!--PWA-SCRIPT-->
