@@ -977,6 +977,16 @@ document.getElementById("qrFile").onchange = async (e)=>{
   }
 };
 
+/* 手滑点错了：不记错因、不给答案，直接回到继续想 */
+document.getElementById("oops").onclick = ()=>{
+  document.getElementById("types").classList.add("hide");
+  const marks = document.getElementById("marks");
+  if(marks) marks.innerHTML = "";
+  const fb = document.getElementById("fb");
+  fb.className = "fb";
+  fb.textContent = "好，接着想。点对了才算过";
+};
+
 document.getElementById("scanCancel").onclick = ()=>{
   stopScan();
   document.getElementById("codeHint").textContent = "已取消扫码";
@@ -1260,7 +1270,7 @@ function onTap(e){
     document.getElementById("types").classList.remove("hide");
   }
 }
-document.querySelectorAll("#types button").forEach(b=>{
+document.querySelectorAll("#types .typesRow button").forEach(b=>{
   b.onclick = ()=>{
     if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
     S.wrong[S.lv][cur._i] = b.dataset.t;
