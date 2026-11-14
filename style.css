@@ -381,7 +381,7 @@ input[type=range]{width:96px;accent-color:var(--brand);vertical-align:middle;hei
 /* 重置今天：破坏性操作，要够好点，但用描边而非色块，避免抢主 CTA */
 .resetBtn{border:1px solid var(--danger-line);background:transparent;color:var(--danger);
   font-family:inherit;font-size:var(--fs-sm);font-weight:600;padding:8px 14px;
-  border-radius:var(--r-sm);min-height:44px;cursor:pointer;
+  border-radius:var(--r-sm);min-height:44px;cursor:pointer;white-space:nowrap;
   -webkit-tap-highlight-color:transparent}
 .resetBtn:active{background:var(--danger-bg)}
 

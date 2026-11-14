@@ -150,7 +150,7 @@ const SFX = (function(){
 
 function fresh(){
   return {v:3, lv:0, mode:"strict", dailyMode:"time", dailyCount:DAILY, dailyMin:10,
-          st:{}, wrong:{}, retry:{}, q:{}, pace:DAILY, sfx:{on:true, vol:0.45}, autoNext:true,
+          st:{}, wrong:{}, retry:{}, q:{}, sfx:{on:true, vol:0.45}, autoNext:true,
           today:{d:"", n:0, sec:0}, history:{}};
 }
 function load(){
@@ -168,7 +168,6 @@ function load(){
       o.history = o.history || {};
       o.q = o.q || {};          // 每题首答记录 [首答对错, 累计错点, 首手耗时ms, 最近做对日期]
       o.retry = o.retry || {};  // 待重做（点了错因看答案的题）
-      o.pace = o.pace || DAILY; // 15 分钟大致能做多少题，滚动更新
       o.sfx = o.sfx || {on:true, vol:0.45};
       if(o.autoNext === undefined) o.autoNext = true;
       return o;
@@ -222,24 +221,19 @@ function planList(i){
 }
 
 /* ---------- 首页 ---------- */
-/** 目标行：把"今天还剩多少"直接写出来，避免以为每次都是从头开始 */
+/** 今日剩余行：分母（目标题数/目标时长）已由环形副标给出，这里只写还差多少，不重复报目标 */
 function targetLine(){
   const doneSec = S.today.d === today() ? (S.today.sec || 0) : 0;
   if(S.dailyMode === "count"){
     const left = Math.max(0, S.dailyCount - S.today.n);
-    return "目标 " + S.dailyCount + " 题" + (left ? " · 还差 " + left : " · 已达标");
+    return left ? "还差 " + left + " 题" : "已达标";
   }
   if(S.dailyMode === "time"){
     const targetSec = S.dailyMin * 60;
-    if(doneSec >= targetSec) return "今天已做 " + Math.round(doneSec/60) + " 分钟 · 再练给 5 分钟";
+    if(doneSec >= targetSec) return "已达标，可加练 5 分";
     const left = Math.ceil((targetSec - doneSec) / 60);
-    return "目标 " + S.dailyMin + " 分钟" + (doneSec ? " · 还差 " + left + " 分钟" : " · 5–15 均可");
+    return doneSec ? "还差 " + left + " 分" : "5–15 均可";
   }
-  return "不限量";
-}
-function dailyTargetText(){
-  if(S.dailyMode === "count") return "目标 " + S.dailyCount + " 题";
-  if(S.dailyMode === "time")  return "目标 " + S.dailyMin + " 分钟（5–15 均可）";
   return "不限量";
 }
 /** 顶部"当前练习"那一行 + 切换面板 */
@@ -333,9 +327,11 @@ function renderHome(){
     ringBig = todaySec < 60 ? todaySec + " 秒" : Math.round(todaySec / 60) + " 分";
     ringSub = "今日 / " + gM + " 分";
   } else {
-    ringPct = Math.min(100, todayN / DAILY * 100);
+    // 自由模式没有目标：环不画完成度（只留底环），中心只报今日累计题数。
+    // 旧版按写死的 DAILY=20 题算百分比，与「不限量」文案自相矛盾。
+    ringPct = 0;
     ringBig = todayN + " 题";
-    ringSub = "今日";
+    ringSub = "今日 · 不限量";
   }
   const C = 2 * Math.PI * 42;
   const fg = document.getElementById("ringfg");
@@ -343,15 +339,15 @@ function renderHome(){
   document.getElementById("ringpct").textContent = ringBig;
   document.getElementById("ringsub").textContent = ringSub;
   document.getElementById("ptoday").textContent =
-      (todaySec < 60 ? Math.round(todaySec) + " 秒" : Math.round(todaySec/60) + " 分钟") +
+      (todaySec < 60 ? todaySec + " 秒" : Math.round(todaySec/60) + " 分") +
       " · " + S.today.n + " 题";
+  document.getElementById("ptarget").textContent = targetLine();
 
   document.getElementById("ppass").textContent = st.pass;
   document.getElementById("pinfo").textContent = L.lb;                 // 级别名单独占右侧，避免长句折行
   document.getElementById("pdone").textContent = doneN;
   document.getElementById("pgoal").textContent = g;
   document.getElementById("pundone").textContent = list.length;
-  document.getElementById("ptarget").textContent = targetLine();
 
   const fs = firstStat(S.lv);
   document.getElementById("pfirst").textContent =
@@ -490,7 +486,7 @@ document.getElementById("nextpass").onclick = ()=>{
 /* ---------- 换设备：只搬「能接着做题」的核心进度 ----------
  * 默认传：档案名、今天已练时间、轮数、做过哪些题、待重做、模式与时长设置
  * 可选传：错题记录、活跃地图（默认不勾，守住精简口径）
- * 不传：首答记录 q、会话快照 sess、音效 pace
+ * 不传：首答记录 q、会话快照 sess、音效设置 sfx
  * 今天压成 t:[日期,题数,秒数]，只在同一天生效、按 max 合并，重复扫码不会虚增。
  * 活跃地图压成 m:[末日, 每字符代表一天的 base36 串]，比 {"日期":题数} 小一个数量级。 */
 /* 紧凑编码：done 通常是「0..N 连成一片」，存 1000 个键太浪费。
@@ -1102,7 +1098,6 @@ function startSecClock(init){
   // 每秒累加一次；暂停或时间到就停，切后台由 visibilitychange 置 paused
   secTick = setInterval(()=>{ if(!paused && !timeUp) sessSec++; }, 1000);
 }
-/** 会话收尾：把这次 15 分钟实际做了多少题，滚动并入 pace 估计 */
 /** 把「这次做到哪儿了」存下来。只在题与题之间存，恢复时当前题从头开始。 */
 function saveSess(){
   if(!cur) return;
@@ -1126,7 +1121,6 @@ function validSess(){
 function endSession(){
   if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
   if(sessSec > 0){ S.today.sec = (S.today.sec || 0) + sessSec; sessSec = 0; }
-  if(sessN > 0 && S.dailyMode === "time") S.pace = Math.max(5, Math.round(S.pace*0.6 + sessN*0.4));
   save();
 }
 /** 倒计时按"实际在做题的时间"累计，暂停/切后台都不走表 */
