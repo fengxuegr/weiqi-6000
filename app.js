@@ -1131,6 +1131,8 @@ function draw(){
   let r0 = 18, r1 = 0, c0 = 18, c1 = 0;
   s.forEach(p=>{ r0=Math.min(r0,p[0]); r1=Math.max(r1,p[0]); c0=Math.min(c0,p[1]); c1=Math.max(c1,p[1]); });
   if(cur.q) cur.q.forEach(p=>{ r0=Math.min(r0,p[0]); r1=Math.max(r1,p[0]); c0=Math.min(c0,p[1]); c1=Math.max(c1,p[1]); });
+  // 多分支题：所有分支都要进视野，否则第二条线路会落在框外
+  if(cur.qa) cur.qa.forEach(b=>b.forEach(p=>{ r0=Math.min(r0,p[0]); r1=Math.max(r1,p[0]); c0=Math.min(c0,p[1]); c1=Math.max(c1,p[1]); }));
   r0=Math.max(0,r0-1); c0=Math.max(0,c0-1); r1=Math.min(18,r1+1); c1=Math.min(18,c1+1);
   // 至少 9×9 视野，保持棋形有上下文
   const needW = Math.max(9, c1-c0+1), needH = Math.max(9, r1-r0+1);
@@ -1184,20 +1186,23 @@ function onTap(e){
   const c = Math.round((px - ox) / cell), r = Math.round((py - oy) / cell);
   const rr = r + el._r0, cc = c + el._c0;
   if(rr<0||rr>18||cc<0||cc>18) return;
-  const q = cur.q || [], exp = q[step];
-  const hit = !!(exp && exp[0]===rr && exp[1]===cc);
+  // 多分支：任一分支在当前手数上的点都算正解（原题库用 (20,20) 分隔多条正解线路）
+  const qq = (cur.qa && cur.qa.length) ? cur.qa : [cur.q || []];
+  const cand = qq.filter(b => { const e = b[step]; return e && e[0]===rr && e[1]===cc; });
+  const hit = cand.length > 0;
 
   // 首答判定：只认本会话的第一手。这是"重新算对"和"记得上次点这里"的唯一分界
-  if(!firstJudged && q.length){
+  if(!firstJudged && qq[0].length){
     firstJudged = true;
     const rec = qRec(S.lv, cur._i);
     if(rec[0] === null){ rec[0] = hit ? 1 : 0; rec[2] = Date.now() - t0; save(); }
   }
 
   if(hit){
+    const b = cand[0];
     placed.push([rr, cc, 1]); step++; SFX.stone();
-    if(step < q.length){ placed.push([q[step][0], q[step][1], 2]); step++; setTimeout(()=>SFX.white(), 130); }
-    if(step >= q.length){ draw(); solved(); }
+    if(step < b.length){ placed.push([b[step][0], b[step][1], 2]); step++; setTimeout(()=>SFX.white(), 130); }
+    if(step >= b.length){ draw(); solved(); }
     else {
       draw();
       document.getElementById("fb").className = "fb ok";
@@ -1224,7 +1229,11 @@ document.querySelectorAll("#types button").forEach(b=>{
     if(!S.retry[S.lv]) S.retry[S.lv] = {};
     S.retry[S.lv][cur._i] = 1;
     answered = true;
-    const a = (cur.q && cur.q[0]);
+    const a = (() => {
+      const qq = (cur.qa && cur.qa.length) ? cur.qa : [cur.q || []];
+      const b = qq[0] || [];
+      return b[step] || b[0];      // 当前手数的正解点；已走完则回退到首手
+    })();
     if(a){
       const marks = document.getElementById("marks");
       const x = ox + (a[1]-document.getElementById("svg")._c0)*cell;
