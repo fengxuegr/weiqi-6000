@@ -705,14 +705,31 @@ document.getElementById("mkCode").onclick = async ()=>{
 
 /* ---------- 扫码导入（设备自带摄像头 + jsQR 解码） ---------- */
 let scanStream = null, scanRAF = 0;
+/** 彻底关闭取景框（成功导入或用户取消时用） */
 function stopScan(){
+  releaseCamera();
+  const v = document.getElementById("scanVideo");
+  if(v) v.style.display = "";
+  const tip = document.getElementById("scanTip");
+  if(tip){ tip.className = "scanTip"; tip.textContent = "把另一台设备上的二维码放进画面里"; }
+  document.getElementById("scanWrap").classList.add("hide");
+  document.getElementById("qrBox").classList.add("hide");
+  document.getElementById("qrHint").classList.add("hide");
+}
+/** 只释放摄像头，取景框留着显示错误原因——避免"一闪就没了"看不出为什么 */
+function releaseCamera(){
   if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF = 0; }
   if(scanStream){ scanStream.getTracks().forEach(t=>{ try{ t.stop(); }catch(e){} }); scanStream = null; }
   const v = document.getElementById("scanVideo");
   if(v) v.srcObject = null;
-  document.getElementById("scanWrap").classList.add("hide");
-  document.getElementById("qrBox").classList.add("hide");
-  document.getElementById("qrHint").classList.add("hide");
+}
+function scanFail(msg){
+  releaseCamera();
+  const v = document.getElementById("scanVideo");
+  if(v) v.style.display = "none";
+  const tip = document.getElementById("scanTip");
+  if(tip){ tip.className = "scanTip scanTipErr"; tip.textContent = msg; }
+  document.getElementById("codeHint").textContent = "扫码失败，原因见上方黑框";
 }
 /** 扫码结果可能是整段网址，也可能就是码本身 */
 function pickCode(text){
@@ -799,14 +816,12 @@ document.getElementById("scanCode").onclick = async ()=>{
     await waitVideoReady(v);
     try{ await v.play(); }catch(e){ /* 有些安卓机 play() 会先报错，只要出画面就能解 */ }
     if(!v.videoWidth){
-      hint.textContent = "摄像头已开但拿不到画面，可能被其它 App 占用" + diag;
-      stopScan();
+      scanFail("摄像头已打开，但拿不到画面（可能被其它 App 占用）" + diag);
       return;
     }
     hint.textContent = "对准另一台设备上的二维码";
     scanLoop();
   }catch(e){
-    stopScan();
     const name = (e && e.name) || "";
     let msg;
     if(name === "NotAllowedError" || name === "PermissionDeniedError")
@@ -818,7 +833,7 @@ document.getElementById("scanCode").onclick = async ()=>{
     else if(name === "SecurityError")
       msg = "当前打开方式不允许用摄像头：请用 https 网页或 Chrome，别在微信里打开";
     else msg = (e && e.message) || String(e);
-    hint.textContent = "打不开摄像头：" + msg + (name ? "｜" + name : "") + diag;
+    scanFail("打不开摄像头：" + msg + (name ? "\n" + name : "") + diag);
   }
 };
 document.getElementById("scanCancel").onclick = ()=>{
