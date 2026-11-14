@@ -303,7 +303,10 @@ function renderHome(){
   document.getElementById("ringpct").textContent = S.today.n + " 题";
 
   document.getElementById("ppass").textContent = st.pass;
-  document.getElementById("pinfo").textContent = `${L.lb} · 已完成 ${doneN} / ${g} 题 · 未做 ${list.length}`;
+  document.getElementById("pinfo").textContent = L.lb;                 // 级别名单独占右侧，避免长句折行
+  document.getElementById("pdone").textContent = doneN;
+  document.getElementById("pgoal").textContent = g;
+  document.getElementById("pundone").textContent = list.length;
   document.getElementById("ptarget").textContent = dailyTargetText();
 
   const fs = firstStat(S.lv);
@@ -321,6 +324,9 @@ function renderHome(){
   document.getElementById("wcount").textContent = wrongOf(S.lv).length + " 道";
   document.getElementById("mode").textContent =
       S.mode==="strict" ? "严格模式（老师方案）" : "压缩模式（跳过旧题）";
+  document.getElementById("modehint").textContent =
+      S.mode==="strict" ? "严格模式＝每遍把旧题重做一遍（老师方案）"
+                        : "压缩模式＝只做错题和本遍新增，会跳过旧题重做";
   syncDaily();
   syncSfx();
   document.getElementById("start").disabled = list.length === 0;

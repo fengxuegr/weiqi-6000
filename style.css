@@ -143,3 +143,10 @@ input[type=range]{width:96px;accent-color:#b8763a;vertical-align:middle}
   -webkit-tap-highlight-color:transparent}
 .updateBar b{font-weight:700;text-decoration:underline}
 .ver{font-family:ui-monospace,Menlo,Consolas,monospace;color:#b8ab97}
+
+/* 窄屏下信息行不再互相挤压：两栏各自不折行，超长才省略 */
+.row > span{min-width:0}
+@media (max-width:400px){
+  .row{font-size:12.5px}
+  .proginfo .row > span:last-child{text-align:right}
+}
