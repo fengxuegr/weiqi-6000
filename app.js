@@ -488,10 +488,11 @@ document.getElementById("nextpass").onclick = ()=>{
   st.pass++; st.done = {}; clearSess(); save(); renderHome();
 };
 /* ---------- 换设备：只搬「能接着做题」的核心进度 ----------
- * 传：档案名、轮数、做过哪些题、待重做、模式与时长设置（可选错题记录）
- * 不传：活跃地图 history、首答记录 q、今日计数 today、会话快照 sess、音效 pace
- * 档案名只占十几个字节，但换设备时省掉一次手动改名，也避免多个孩子串档。
- * 实测（每档做 300 题）：核心 1.0 KB、含错题 1.9 KB；完整包 8.9 KB */
+ * 默认传：档案名、今天已练时间、轮数、做过哪些题、待重做、模式与时长设置
+ * 可选传：错题记录、活跃地图（默认不勾，守住精简口径）
+ * 不传：首答记录 q、会话快照 sess、音效 pace
+ * 今天压成 t:[日期,题数,秒数]，只在同一天生效、按 max 合并，重复扫码不会虚增。
+ * 活跃地图压成 m:[末日, 每字符代表一天的 base36 串]，比 {"日期":题数} 小一个数量级。 */
 /* 紧凑编码：done 通常是「0..N 连成一片」，存 1000 个键太浪费。
  * 改成 [轮数, 前沿, 缺口列表]；若缺口比题目还多（极端稀疏），用 [轮数, -1, 题号列表]。
  * 实测：单档 300 题 988 → 160 字符；六档各 1000 题 3404 → 180 字符。 */
@@ -540,6 +541,38 @@ function unpackIdx(o){
   });
   return out;
 }
+/* 活跃地图：最近 180 天，一个字符代表一天做了几题（0-9a-z，0 = 没记录）。
+ * 每天 5–15 分钟很难超过 35 题，超出按 35 封顶；地图只表示活跃度，不参与判题。 */
+const MAP_MAX_DAYS = 180;
+function shiftDay(dstr, delta){
+  const p = String(dstr).split("-").map(Number);
+  if(p.length !== 3 || p.some(x=>!Number.isFinite(x))) return dstr;
+  const d = new Date(p[0], p[1]-1, p[2] + delta);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function packMap(){
+  const h = S.history || {}, end = today(), days = [];
+  for(let i=MAP_MAX_DAYS-1;i>=0;i--){
+    const v = +(h[shiftDay(end,-i)] || 0);
+    days.push(Number.isFinite(v) ? Math.min(35, Math.max(0, v)) : 0);
+  }
+  let first = 0;
+  while(first < days.length && !days[first]) first++;   // 前面连续没记录的天不用传
+  if(first >= days.length) return null;
+  return [end, days.slice(first).map(v=>v.toString(36)).join("")];
+}
+function unpackMap(m){
+  const out = {};
+  if(!Array.isArray(m) || typeof m[0] !== "string" || typeof m[1] !== "string") return out;
+  const end = m[0], s = m[1];
+  for(let i=0;i<s.length && i<MAP_MAX_DAYS;i++){
+    const v = parseInt(s[i], 36);
+    if(!Number.isFinite(v) || v <= 0) continue;
+    out[shiftDay(end, -(s.length-1-i))] = v;
+  }
+  return out;
+}
+
 /** 名字来自另一台设备的二维码，按不可信输入处理：去控制字符、限长 16 字 */
 function cleanName(s){
   return Array.from(String(s || "").replace(/[<>]/g, "").replace(/\s+/g, " "))
@@ -553,11 +586,14 @@ function blankProfile(){
   const st = S.st || {};
   return !Object.keys(st).some(k => Object.keys((st[k] || {}).done || {}).length);
 }
-function makePortable(withWrong){
+function makePortable(withWrong, withMap){
+  const t = (S.today && S.today.d === today()) ? S.today : {n:0, sec:0};
   const o = {v:3, kind:"portable", at:Date.now(), nm:cleanName(pname(PID)),
              lv:S.lv, mode:S.mode,
              dailyMode:S.dailyMode, dailyCount:S.dailyCount, dailyMin:S.dailyMin,
+             t:[today(), t.n || 0, t.sec || 0],
              st:packSt(), retry:packIdx(S.retry)};
+  if(withMap){ const m = packMap(); if(m) o.m = m; }
   if(withWrong){
     const w = {};
     Object.keys(S.wrong || {}).forEach(k=>{
@@ -585,6 +621,18 @@ function applyPortable(o){
       w[k] = m;
     });
     S.wrong = w;
+  }
+  // 今天已练时间/题数：只认同一天的码，按 max 合并 —— 换设备能接着倒计时，重复扫码也不会虚增
+  if(Array.isArray(o.t) && o.t[0] === today()){
+    if(!S.today || S.today.d !== today()) S.today = {d: today(), n:0, sec:0};
+    S.today.n   = Math.max((+S.today.n || 0), (+o.t[1] || 0));
+    S.today.sec = Math.max((+S.today.sec || 0), (+o.t[2] || 0));
+  }
+  // 活跃地图：按日期取较大值补齐，老记录不丢、重复导入幂等
+  if(o.m){
+    const m = unpackMap(o.m);
+    if(!S.history) S.history = {};
+    Object.keys(m).forEach(d=>{ S.history[d] = Math.max((+S.history[d] || 0), m[d]); });
   }
   S.sess = null;                 // 旧会话快照作废，避免和搬来的进度打架
   save();
@@ -773,8 +821,14 @@ async function importFromCode(code){
   } else {
     where = "会替换「" + pname(PID) + "」这一档的进度，档案名不变";
   }
+  const bits = [];
+  if(Array.isArray(o.t) && o.t[0] === today() && ((+o.t[1] || 0) > 0 || (+o.t[2] || 0) > 0))
+    bits.push("今天已练 " + Math.round((+o.t[2] || 0)/60) + " 分钟");
+  if(o.m) bits.push("活跃地图");
+  const tail = bits.length ? bits.join("、") + "会一起带过来；首答记录保留本机，确定吗？"
+                           : "首答记录保留本机，确定吗？";
   const msg = "来自「" + (src || "另一台设备") + "」：" + lb + " · 第 " + pass + " 轮。\n" +
-              where + "。\n活跃地图和首答记录保留本机的，确定吗？";
+              where + "。\n" + tail;
   if(!confirm(msg)) return false;
   if(targetId !== PID) switchProfile(targetId);
   if(renameTo) renameProfile(PID, renameTo);
@@ -785,7 +839,9 @@ async function importFromCode(code){
 document.getElementById("mkCode").onclick = async ()=>{
   const hint = document.getElementById("codeHint");
   try{
-    const code = await encodeCode(makePortable(document.getElementById("withWrong").checked));
+    const code = await encodeCode(makePortable(
+      document.getElementById("withWrong").checked,
+      document.getElementById("withMap").checked));
     showQr(code);
     hint.textContent = "已生成「" + pname(PID) + "」的进度二维码（" + code.length +
                        " 个字符）——用另一台设备点「扫码导入」对准它";
