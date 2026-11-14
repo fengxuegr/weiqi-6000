@@ -809,6 +809,25 @@ document.getElementById("scanCode").onclick = async ()=>{
   document.getElementById("qrHint").classList.add("hide");
   document.getElementById("scanWrap").classList.remove("hide");
   hint.textContent = "正在打开摄像头…";
+
+  // 先查权限状态：被"阻止"过的话浏览器不会再弹框，只会直接拒绝
+  let perm = "";
+  try{
+    if(navigator.permissions && navigator.permissions.query){
+      const st = await navigator.permissions.query({ name: "camera" });
+      perm = st.state || "";
+    }
+  }catch(e){}
+  if(perm === "denied"){
+    scanFail("相机权限被这个网站阻止了。\n\n" +
+             "① 点地址栏左侧的 锁 / ⓘ 图标\n" +
+             "② 找到「相机」→ 改成「允许」\n" +
+             "③ 刷新页面后再点扫码\n\n" +
+             "如果地址栏没有相机选项，说明这台手机把 Chrome 的相机权限整体关了：\n" +
+             "设置 → 应用 → Chrome → 权限 → 相机 → 允许" + diag);
+    return;
+  }
+
   try{
     scanStream = await openCamera();
     const v = document.getElementById("scanVideo");
@@ -833,7 +852,10 @@ document.getElementById("scanCode").onclick = async ()=>{
     else if(name === "SecurityError")
       msg = "当前打开方式不允许用摄像头：请用 https 网页或 Chrome，别在微信里打开";
     else msg = (e && e.message) || String(e);
-    scanFail("打不开摄像头：" + msg + (name ? "\n" + name : "") + diag);
+    const extra = (name === "NotAllowedError" || name === "PermissionDeniedError")
+      ? "\n\n如果刚才不小心点了「禁止」，浏览器以后不会再问：\n点地址栏左侧的 锁 / ⓘ → 相机 → 允许 → 刷新"
+      : "";
+    scanFail("打不开摄像头：" + msg + extra + (name ? "\n\n" + name : "") + diag);
   }
 };
 document.getElementById("scanCancel").onclick = ()=>{
