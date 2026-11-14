@@ -51,6 +51,7 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
 .fileInput{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;
   clip:rect(0 0 0 0);clip-path:inset(50%);border:0;padding:0;margin:0}
 .fileBtn{text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#mHint{margin-top:10px}
 .foot{font-size:11px;color:#9a8b78;text-align:center;margin:18px 0}
 select{font-family:inherit;font-size:14px;padding:6px 10px;border:1px solid #d8c9ae;border-radius:8px;background:#fff;color:#5d4f3f}
 .seg{display:inline-flex}
@@ -137,7 +138,7 @@ body{overscroll-behavior:none;
 
 /* ---------- 音效设置 ---------- */
 input[type=range]{width:96px;accent-color:#b8763a;vertical-align:middle}
-.hint{font-size:11px;color:#a3957f;margin:-4px 0 6px}
+.hint{font-size:11px;color:#a3957f;margin:4px 0 8px;line-height:1.5}
 
 /* ---------- 新版本提示条 ---------- */
 .updateBar{position:fixed;left:50%;transform:translateX(-50%);
