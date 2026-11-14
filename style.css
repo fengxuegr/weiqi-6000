@@ -188,6 +188,8 @@ input[type=range]{width:96px;accent-color:#b8763a;vertical-align:middle}
 .wact{display:flex;gap:8px;padding:9px 10px;background:#fdfbf6;border-top:1px solid #f1ece2}
 .wact .chip{flex:1}
 
-/* 行内小链接按钮（如「重置」） */
-.linkBtn{border:0;background:none;padding:2px 4px;color:#b8763a;font-family:inherit;
-  font-size:12px;text-decoration:underline;cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* 重置今天：要看得见、要够大好点，但语气不能像主按钮 */
+.resetBtn{border:1px solid #e2c6bd;background:#fdf6f3;color:#a85846;font-family:inherit;
+  font-size:13px;font-weight:700;padding:7px 14px;border-radius:8px;min-height:34px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.resetBtn:active{background:#f7ebe6}
