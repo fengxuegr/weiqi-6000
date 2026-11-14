@@ -148,7 +148,7 @@ const SFX = (function(){
 
 function fresh(){
   return {v:3, lv:0, mode:"strict", dailyMode:"time", dailyCount:DAILY, dailyMin:10,
-          st:{}, wrong:{}, retry:{}, q:{}, pace:DAILY, sfx:{on:true, vol:0.45},
+          st:{}, wrong:{}, retry:{}, q:{}, pace:DAILY, sfx:{on:true, vol:0.45}, autoNext:true,
           today:{d:"", n:0, sec:0}, history:{}};
 }
 function load(){
@@ -168,6 +168,7 @@ function load(){
       o.retry = o.retry || {};  // 待重做（点了错因看答案的题）
       o.pace = o.pace || DAILY; // 15 分钟大致能做多少题，滚动更新
       o.sfx = o.sfx || {on:true, vol:0.45};
+      if(o.autoNext === undefined) o.autoNext = true;
       return o;
     }
   }catch(e){}
@@ -364,6 +365,7 @@ function renderHome(){
 
   renderWrong();
   syncDaily();
+  syncAuto();
   syncSfx();
   document.getElementById("start").disabled = list.length === 0;
   const sn = list.length ? validSess() : null;
@@ -410,6 +412,12 @@ function renderCalendar(){
   const s = calcStreak();
   document.getElementById("streak").textContent = `连续 ${s} 天`;
 }
+function syncAuto(){
+  const on = S.autoNext !== false;
+  const b = document.getElementById("autoBtn");
+  b.textContent = on ? "开" : "关";
+  b.classList.toggle("on", on);
+}
 function syncSfx(){
   const on = !S.sfx || S.sfx.on !== false;
   const b = document.getElementById("sfxBtn");
@@ -441,6 +449,11 @@ document.querySelectorAll(".chip").forEach(c=>{
   c.onclick = ()=>{ S.dailyCount = +c.dataset.n; save(); renderHome(); };
 });
 document.getElementById("selMin").onchange = (e)=>{ S.dailyMin = +e.target.value; save(); renderHome(); };
+document.getElementById("autoBtn").onclick = ()=>{
+  S.autoNext = (S.autoNext === false);   // 取反
+  save(); renderHome();
+};
+
 document.getElementById("sfxBtn").onclick = ()=>{
   S.sfx = S.sfx || {on:true, vol:0.45};
   S.sfx.on = !S.sfx.on; save(); renderHome();
@@ -960,6 +973,7 @@ document.getElementById("scanCancel").onclick = ()=>{
 let queue = [], cur = null, cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
 let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
 let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数（暂停时不计）
+let autoTimer = null;                              // 答对后自动进下一题的定时器
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
@@ -1103,6 +1117,7 @@ document.getElementById("start").onclick = ()=>{
   nextQ();
 };
 document.getElementById("quit").onclick = ()=>{
+  clearTimeout(autoTimer); autoTimer = null;
   stopTimer(); stopSecClock(); endSession(); clearSess();
   document.getElementById("clock").textContent = "";
   document.getElementById("addTime").classList.add("hide");
@@ -1110,7 +1125,17 @@ document.getElementById("quit").onclick = ()=>{
   document.getElementById("home").classList.remove("hide");
   renderHome();
 };
+/** 答对后自动进下一题；多步题多给一点时间看清整块棋形 */
+function scheduleAutoNext(){
+  clearTimeout(autoTimer); autoTimer = null;
+  if(S.autoNext === false) return;
+  const n = (cur && cur.q) ? cur.q.length : 1;
+  const delay = Math.min(1800, 900 + 150 * (n - 1));   // 单步 900ms，9 手封顶 1800ms
+  autoTimer = setTimeout(()=>{ if(answered && !paused && !timeUp) nextQ(); }, delay);
+}
+
 function nextQ(){
+  clearTimeout(autoTimer); autoTimer = null;
   if(timeUp){ document.getElementById("fb").className="fb ok";
               document.getElementById("fb").textContent="时间到，点右上「返回」看今天的进度"; return; }
   if(queue.length === 0){ SFX.done(); clearSess(); document.getElementById("fb").textContent = "本次做完啦，回去看进度"; document.getElementById("fb").className="fb ok"; return; }
@@ -1174,12 +1199,13 @@ function solved(){
   markDone();
   document.getElementById("ir").textContent = ok;
   document.getElementById("fb").className = "fb ok";
-  document.getElementById("fb").textContent = "正确 ✔ 点棋盘继续下一题";
+  document.getElementById("fb").textContent = S.autoNext === false ? "正确 ✔ 点棋盘继续下一题" : "正确 ✔";
+  scheduleAutoNext();
   save();
 }
 function onTap(e){
   if(paused) return;                                                    // 已暂停，棋盘不响应
-  if(answered) { nextQ(); return; }
+  if(answered) { clearTimeout(autoTimer); autoTimer = null; nextQ(); return; }
   const el = e.currentTarget, rect = el.getBoundingClientRect(), vb = el.viewBox.baseVal;
   const px = (e.clientX - rect.left) / rect.width * vb.width;
   const py = (e.clientY - rect.top) / rect.height * vb.height;
