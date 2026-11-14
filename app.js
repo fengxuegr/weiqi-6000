@@ -350,7 +350,16 @@ function renderHome(){
   syncDaily();
   syncSfx();
   document.getElementById("start").disabled = list.length === 0;
-  document.getElementById("start").textContent = list.length ? "开始做题" : "这一遍已完成，点下面进入下一遍";
+  const sn = list.length ? validSess() : null;
+  if(!list.length){
+    document.getElementById("start").textContent = "这一遍已完成，点下面进入下一遍";
+  } else if(sn && S.dailyMode === "time"){
+    const mm = Math.floor((sn.left || 0) / 60000), ss = Math.floor(((sn.left || 0) % 60000) / 1000);
+    document.getElementById("start").textContent =
+        "继续上次（还剩 " + mm + ":" + String(ss).padStart(2, "0") + "）";
+  } else {
+    document.getElementById("start").textContent = "开始做题";
+  }
   document.getElementById("nextpass").classList.toggle("hide", list.length > 0);
   renderCalendar();
 }
@@ -443,7 +452,7 @@ document.getElementById("nextpass").onclick = ()=>{
   const st = lvSt(S.lv);
   if(st.pass >= 10){ alert("这一级 10 遍已走完，本级毕业 🎉"); return; }
   if(!confirm("确认本遍结束，进入第 " + (st.pass+1) + " 遍？\n下一遍要完成前 " + (100*(st.pass+1)) + " 题。")) return;
-  st.pass++; st.done = {}; save(); renderHome();
+  st.pass++; st.done = {}; clearSess(); save(); renderHome();
 };
 document.getElementById("export").onclick = ()=>{
   const blob = new Blob([JSON.stringify(S,null,2)],{type:"application/json"});
@@ -479,12 +488,32 @@ let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
 function stopSecClock(){ if(secTick){ clearInterval(secTick); secTick = null; } }
-function startSecClock(){
-  sessSec = 0; paused = false; stopSecClock();
+function startSecClock(init){
+  sessSec = init || 0; paused = false; stopSecClock();
   // 每秒累加一次；暂停或时间到就停，切后台由 visibilitychange 置 paused
   secTick = setInterval(()=>{ if(!paused && !timeUp) sessSec++; }, 1000);
 }
 /** 会话收尾：把这次 15 分钟实际做了多少题，滚动并入 pace 估计 */
+/** 把「这次做到哪儿了」存下来。只在题与题之间存，恢复时当前题从头开始。 */
+function saveSess(){
+  if(!cur) return;
+  S.sess = { day: today(), at: Date.now(), lv: S.lv, pass: lvSt(S.lv).pass, mode: S.dailyMode,
+             left: remaining, queue: queue.slice(), cur: cur._i,
+             done: sessN, sec: sessSec };
+  save();
+}
+function clearSess(){ if(S.sess){ S.sess = null; save(); } }
+/** 快照有效条件：同一天、12 小时内、级别/遍次/模式都没变 */
+function validSess(){
+  const s = S.sess;
+  if(!s || !s.day || s.day !== today()) return null;
+  if(Date.now() - (s.at || 0) > 12*3600*1000) return null;
+  if(s.lv !== S.lv) return null;
+  if(s.pass !== lvSt(S.lv).pass) return null;
+  if(s.mode !== S.dailyMode) return null;
+  return s;
+}
+
 function endSession(){
   if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
   if(sessSec > 0){ S.today.sec = (S.today.sec || 0) + sessSec; sessSec = 0; }
@@ -502,7 +531,7 @@ function tick(){
   document.getElementById("clock").textContent =
       remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
   if(remaining <= 0 && !timeUp){
-    timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); SFX.timeup();
+    timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); clearSess(); SFX.timeup();
     document.getElementById("pause").classList.add("hide");
     document.getElementById("fb").className = "fb ok";
     document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工" +
@@ -516,7 +545,7 @@ function startCountdown(ms){
 }
 function pauseSession(){
   if(!running || timeUp) return;
-  running = false; paused = true; stopTimer();
+  running = false; paused = true; stopTimer(); saveSess();
   document.getElementById("pause").textContent = "继续";
   document.getElementById("pauseMask").classList.remove("hide");
 }
@@ -531,6 +560,8 @@ document.getElementById("start").onclick = ()=>{
   SFX.unlock();
   const st = lvSt(S.lv);
   const all = planList(S.lv).filter(k => !st.done[k]);
+  const snap = validSess();
+
   ok = 0; bad = 0; sessN = 0; timeUp = false; requeued = {}; stopTimer();
   running = false; remaining = 0;
   document.getElementById("clock").textContent = "";
@@ -539,8 +570,19 @@ document.getElementById("start").onclick = ()=>{
   document.getElementById("pause").textContent = "暂停";
   // 只有限时模式才显示暂停按钮
   document.getElementById("pause").classList.toggle("hide", S.dailyMode !== "time");
-  startSecClock();
-  if(S.dailyMode === "count"){
+
+  let initSec = 0;
+  if(snap){
+    // 接着上次被打断的那次：题目从当前题起，剩余时间也接上
+    queue = snap.queue.slice();
+    if(snap.cur !== null && snap.cur !== undefined) queue.unshift(snap.cur);
+    sessN = snap.done || 0; ok = sessN;
+    initSec = snap.sec || 0;
+    if(S.dailyMode === "time"){
+      const quotaLeft = Math.max(60, S.dailyMin*60 - (S.today.sec || 0));
+      startCountdown(Math.max(60000, Math.min(snap.left || 0, quotaLeft*1000)));
+    }
+  } else if(S.dailyMode === "count"){
     queue = all.slice(0, S.dailyCount);
   } else if(S.dailyMode === "time"){
     queue = all.slice();
@@ -554,16 +596,19 @@ document.getElementById("start").onclick = ()=>{
   } else {
     queue = all.slice();          // 自由模式：不限量，做到点返回
   }
+  startSecClock(initSec);
+
   const st2 = lvSt(S.lv);
   document.getElementById("phead").textContent =
       DATA[S.lv].lb + " · 第 " + st2.pass + " 遍 · " +
-      (S.dailyMode==="free" ? "自由" : (S.dailyMode==="count" ? S.dailyCount+" 题" : S.dailyMin+" 分钟"));
+      (S.dailyMode==="free" ? "自由" : (S.dailyMode==="count" ? S.dailyCount+" 题" : S.dailyMin+" 分钟")) +
+      (snap ? " · 接着上次" : "");
   document.getElementById("home").classList.add("hide");
   document.getElementById("play").classList.remove("hide");
   nextQ();
 };
 document.getElementById("quit").onclick = ()=>{
-  stopTimer(); stopSecClock(); endSession();
+  stopTimer(); stopSecClock(); endSession(); clearSess();
   document.getElementById("clock").textContent = "";
   document.getElementById("play").classList.add("hide");
   document.getElementById("home").classList.remove("hide");
@@ -572,7 +617,7 @@ document.getElementById("quit").onclick = ()=>{
 function nextQ(){
   if(timeUp){ document.getElementById("fb").className="fb ok";
               document.getElementById("fb").textContent="时间到，点右上「返回」看今天的进度"; return; }
-  if(queue.length === 0){ SFX.done(); document.getElementById("fb").textContent = "本次做完啦，回去看进度"; document.getElementById("fb").className="fb ok"; return; }
+  if(queue.length === 0){ SFX.done(); clearSess(); document.getElementById("fb").textContent = "本次做完啦，回去看进度"; document.getElementById("fb").className="fb ok"; return; }
   const idx = queue.shift();
   cur = DATA[S.lv].p[idx]; cur._i = idx; answered = false; step = 0; placed = [];
   firstJudged = false; t0 = Date.now();
@@ -583,6 +628,7 @@ function nextQ(){
   document.getElementById("fb").className = "fb";
   document.getElementById("types").classList.add("hide");
   draw();
+  saveSess();
 }
 function draw(){
   const s = cur.s, svg = document.getElementById("svg");
