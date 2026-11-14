@@ -132,6 +132,8 @@ const SFX = (function(){
     stone(){ knock([[1900, 0.9, 1.0], [5200, 1.2, 0.04]], 0.105, 0.52); },
     // 白棋应手：同一质感，略高略轻，让孩子听出"对方下了一手"
     white(){ knock([[2300, 0.9, 1.0], [6000, 1.2, 0.04]], 0.090, 0.34); },
+    // 提子：比落子低一档、更闷，接在"啪"之后作为独立的第二声
+    capture(){ setTimeout(()=>knock([[1150, 0.8, 1.0], [2900, 1.1, 0.10]], 0.135, 0.28), 70); },
     ok(){                                                  // 答对：两个上行音，音量压到很轻
       setTimeout(()=>beep("sine", 880, 880, 0.10, 0.12), 120);
       setTimeout(()=>beep("sine", 1320, 1320, 0.15, 0.10), 215);
@@ -998,6 +1000,7 @@ let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
 let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数（暂停时不计）
 let autoTimer = null;                              // 答对后自动进下一题的定时器
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
+let lastCapCount = 0;                              // 最后一手吃了几子（吃子那手多留时间看清棋形）
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
 function stopSecClock(){ if(secTick){ clearInterval(secTick); secTick = null; } }
@@ -1153,7 +1156,8 @@ function scheduleAutoNext(){
   clearTimeout(autoTimer); autoTimer = null;
   if(S.autoNext === false) return;
   const n = (cur && cur.q) ? cur.q.length : 1;
-  const delay = Math.min(1800, 900 + 150 * (n - 1));   // 单步 900ms，9 手封顶 1800ms
+  let delay = Math.min(1800, 900 + 150 * (n - 1));     // 单步 900ms，9 手封顶 1800ms
+  if(lastCapCount > 0) delay = Math.min(2600, delay + 700);  // 刚吃了子，多留一会儿看清空出来的点
   autoTimer = setTimeout(()=>{ if(answered && !paused && !timeUp) nextQ(); }, delay);
 }
 
@@ -1164,7 +1168,7 @@ function nextQ(){
   if(queue.length === 0){ SFX.done(); clearSess(); document.getElementById("fb").textContent = "本次做完啦，回去看进度"; document.getElementById("fb").className="fb ok"; return; }
   const idx = queue.shift();
   cur = DATA[S.lv].p[idx]; cur._i = idx; answered = false; step = 0; placed = [];
-  firstJudged = false; t0 = Date.now();
+  firstJudged = false; t0 = Date.now(); lastCapCount = 0;
   document.getElementById("iq").textContent = "第 " + (idx+1) + " 题";
   document.getElementById("ir").textContent = ok;
   document.getElementById("iw").textContent = bad;
@@ -1174,7 +1178,61 @@ function nextQ(){
   draw();
   saveSess();
 }
-function draw(){
+/* ---------- 自动提子 ----------
+ * 题库里约一半的答案会吃子：全库 7356 条答案分支中有 3444 条、共应提掉 11017 子。
+ * 旧版只是把「初始棋子 + 已落子」照单全画，被吃的子一直留在盘上，孩子看到的是错棋形。
+ * 这里按落子顺序重建盘面，每手之后按围棋规则提掉无气的对方棋块。
+ * 初始盘面原样保留（那就是题面），只处理落子带来的变化；答案序列经全库校验无自杀手。 */
+const NB = 19, DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
+function inBoard(r,c){ return r>=0 && r<NB && c>=0 && c<NB; }
+/** 找 (r,c) 所在同色棋块，返回棋子坐标列表和气的数目 */
+function groupInfo(b, r, c, col){
+  const stones = [], seen = new Set(), libs = new Set(), stack = [[r,c]];
+  while(stack.length){
+    const [y,x] = stack.pop(), k = y*NB+x;
+    if(seen.has(k)) continue;
+    seen.add(k); stones.push([y,x]);
+    DIRS.forEach(d=>{
+      const ny = y+d[0], nx = x+d[1];
+      if(!inBoard(ny,nx)) return;
+      const v = b[ny][nx];
+      if(v === 0) libs.add(ny*NB+nx);
+      else if(v === col && !seen.has(ny*NB+nx)) stack.push([ny,nx]);
+    });
+  }
+  return { stones, libs: libs.size };
+}
+/** 落子后提掉四邻中已无气的对方棋块，返回提子数。
+ *  自杀手不自行移除（题库不会出现，保留可见比莫名少子更友好）。 */
+function captureAfter(b, r, c, col){
+  const opp = col === 1 ? 2 : 1, checked = new Set();
+  let n = 0;
+  DIRS.forEach(d=>{
+    const y = r+d[0], x = c+d[1], k = y*NB+x;
+    if(!inBoard(y,x) || b[y][x] !== opp || checked.has(k)) return;
+    const g = groupInfo(b, y, x, opp);
+    g.stones.forEach(p=>checked.add(p[0]*NB+p[1]));
+    if(g.libs === 0) g.stones.forEach(p=>{ b[p[0]][p[1]] = 0; n++; });
+  });
+  return n;
+}
+/** 由题面 + 已落子序列重建当前盘面；capLog[i] 记第 i 手提掉了几子 */
+function playBoard(){
+  const b = Array.from({length:NB}, ()=>new Array(NB).fill(0));
+  (cur.s || []).forEach(p=>{ if(inBoard(p[0],p[1])) b[p[0]][p[1]] = p[2]; });
+  const capLog = [];
+  (placed || []).forEach(p=>{
+    if(!inBoard(p[0],p[1])){ capLog.push(0); return; }
+    b[p[0]][p[1]] = p[2];
+    capLog.push(captureAfter(b, p[0], p[1], p[2]));
+  });
+  return { board:b, capLog };
+}
+
+/** from = 本次点击开始落子前的 placed 长度；只统计这一次新落的手数造成的提子 */
+function draw(from){
+  const pb = playBoard(), board = pb.board;
+  const caps = pb.capLog.slice(Math.max(0, from || 0)).reduce((a,b)=>a+b, 0);
   const s = cur.s, svg = document.getElementById("svg");
   let r0 = 18, r1 = 0, c0 = 18, c1 = 0;
   s.forEach(p=>{ r0=Math.min(r0,p[0]); r1=Math.max(r1,p[0]); c0=Math.min(c0,p[1]); c1=Math.max(c1,p[1]); });
@@ -1196,24 +1254,22 @@ function draw(){
   let g = `<rect width="${W}" height="${H}" fill="#e8c879" rx="6"/>`;
   for(let i=0;i<w;i++) g += `<line x1="${PAD+i*cell}" y1="${PAD}" x2="${PAD+i*cell}" y2="${PAD+(h-1)*cell}" stroke="#7a5a2a" stroke-width="1"/>`;
   for(let j=0;j<h;j++) g += `<line x1="${PAD}" y1="${PAD+j*cell}" x2="${PAD+(w-1)*cell}" y2="${PAD+j*cell}" stroke="#7a5a2a" stroke-width="1"/>`;
-  s.forEach(p=>{
-    const x = PAD+(p[1]-c0)*cell, y = PAD+(p[0]-r0)*cell, r = cell*0.46;
-    g += p[2]===1
-      ? `<circle cx="${x}" cy="${y}" r="${r}" fill="#1a1a1a"/>`
-      : `<circle cx="${x}" cy="${y}" r="${r}" fill="#fbfbfb" stroke="#333" stroke-width="1"/>`;
-  });
+  for(let r=0;r<NB;r++) for(let c=0;c<NB;c++){
+    const v = board[r][c];
+    if(!v || r<r0 || r>r1 || c<c0 || c>c1) continue;
+    const x = PAD+(c-c0)*cell, y = PAD+(r-r0)*cell, rad = cell*0.46;
+    g += v===1
+      ? `<circle cx="${x}" cy="${y}" r="${rad}" fill="#1a1a1a"/>`
+      : `<circle cx="${x}" cy="${y}" r="${rad}" fill="#fbfbfb" stroke="#333" stroke-width="1"/>`;
+  }
+  // 错点/正解标记放在棋子之上，一定看得见
   g += `<g id="marks"></g>`;
-  placed.forEach(p=>{
-    const x = PAD+(p[1]-c0)*cell, y = PAD+(p[0]-r0)*cell, r = cell*0.46;
-    g += p[2]===1
-      ? `<circle cx="${x}" cy="${y}" r="${r}" fill="#1a1a1a"/>`
-      : `<circle cx="${x}" cy="${y}" r="${r}" fill="#fbfbfb" stroke="#333" stroke-width="1"/>`;
-  });
   svg.innerHTML = g;
   svg.onclick = onTap;
   svg._c0 = c0; svg._r0 = r0;
+  return caps;
 }
-function solved(){
+function solved(capText){
   answered = true; ok++; sessN++; SFX.ok();
   const st = lvSt(S.lv); if(!st.done[cur._i]) st.done[cur._i] = 1;
   const r = qRec(S.lv, cur._i);
@@ -1222,7 +1278,8 @@ function solved(){
   markDone();
   document.getElementById("ir").textContent = ok;
   document.getElementById("fb").className = "fb ok";
-  document.getElementById("fb").textContent = S.autoNext === false ? "正确 ✔ 点棋盘继续下一题" : "正确 ✔";
+  document.getElementById("fb").textContent = "正确 ✔" + (capText || "") +
+      (S.autoNext === false ? " 点棋盘继续下一题" : "");
   scheduleAutoNext();
   save();
 }
@@ -1248,14 +1305,18 @@ function onTap(e){
   }
 
   if(hit){
-    const b = cand[0];
+    const b = cand[0], from = placed.length;
     placed.push([rr, cc, 1]); step++; SFX.stone();
     if(step < b.length){ placed.push([b[step][0], b[step][1], 2]); step++; setTimeout(()=>SFX.white(), 130); }
-    if(step >= b.length){ draw(); solved(); }
+    // 重画时按规则提子；只把「这一次点击新落的手」吃到的子报出来
+    const caps = draw(from);
+    lastCapCount = caps;
+    if(caps) SFX.capture();
+    const capText = caps ? "，提掉 " + caps + " 子" : "";
+    if(step >= b.length) solved(capText);
     else {
-      draw();
       document.getElementById("fb").className = "fb ok";
-      document.getElementById("fb").textContent = "对，白棋应了一手，继续把这一局走完";
+      document.getElementById("fb").textContent = "对，白棋应了一手" + capText + "，继续把这一局走完";
     }
   } else {
     bad++;
