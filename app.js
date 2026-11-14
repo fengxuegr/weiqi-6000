@@ -764,6 +764,32 @@ function scanLoop(){
   }
   scanRAF = requestAnimationFrame(scanLoop);
 }
+/** 是否以"独立窗口/桌面图标"方式运行（此时没有地址栏，权限要按 App 去给） */
+function isStandalone(){
+  try{
+    if(navigator.standalone === true) return true;
+    if(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+    if(window.matchMedia && window.matchMedia("(display-mode: fullscreen)").matches) return true;
+  }catch(e){}
+  return false;
+}
+/** 相机权限被拒时，按运行方式给不同的操作路径 */
+function permGuide(){
+  if(isStandalone()){
+    return "你现在是从桌面图标打开的（没有地址栏），要去系统里给这个应用授权：\n" +
+           "① 回到桌面，长按「围棋6000题」图标\n" +
+           "② 点「应用信息」/「应用详情」\n" +
+           "③ 权限 → 相机 → 允许\n" +
+           "④ 回来重开应用，再点扫码\n\n" +
+           "（找不到的话：设置 → 应用 → 找到本应用 → 权限 → 相机）";
+  }
+  return "① 点地址栏左侧的 锁 / ⓘ 图标\n" +
+         "② 找到「相机」→ 改成「允许」\n" +
+         "③ 刷新页面后再点扫码\n\n" +
+         "如果地址栏里没有相机选项，说明手机把浏览器的相机权限整体关了：\n" +
+         "设置 → 应用 → Chrome → 权限 → 相机 → 允许";
+}
+
 /** 依次尝试几种约束：部分安卓机不接受 ideal / 对象形式的 facingMode */
 async function openCamera(){
   const tries = [
@@ -819,12 +845,8 @@ document.getElementById("scanCode").onclick = async ()=>{
     }
   }catch(e){}
   if(perm === "denied"){
-    scanFail("相机权限被这个网站阻止了。\n\n" +
-             "① 点地址栏左侧的 锁 / ⓘ 图标\n" +
-             "② 找到「相机」→ 改成「允许」\n" +
-             "③ 刷新页面后再点扫码\n\n" +
-             "如果地址栏没有相机选项，说明这台手机把 Chrome 的相机权限整体关了：\n" +
-             "设置 → 应用 → Chrome → 权限 → 相机 → 允许" + diag);
+    scanFail("相机权限被拒绝了。\n\n" + permGuide() +
+             "\n\n不想折腾权限的话，直接用「从相册选二维码图片」，不需要相机。" + diag);
     return;
   }
 
@@ -853,7 +875,7 @@ document.getElementById("scanCode").onclick = async ()=>{
       msg = "当前打开方式不允许用摄像头：请用 https 网页或 Chrome，别在微信里打开";
     else msg = (e && e.message) || String(e);
     const extra = (name === "NotAllowedError" || name === "PermissionDeniedError")
-      ? "\n\n如果刚才不小心点了「禁止」，浏览器以后不会再问：\n点地址栏左侧的 锁 / ⓘ → 相机 → 允许 → 刷新"
+      ? "\n\n" + permGuide() + "\n\n不想折腾权限的话，直接用「从相册选二维码图片」，不需要相机。"
       : "";
     scanFail("打不开摄像头：" + msg + extra + (name ? "\n\n" + name : "") + diag);
   }
