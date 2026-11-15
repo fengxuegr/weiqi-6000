@@ -64,14 +64,17 @@
   </div>
 
   <div class="card">
-    <h2>3 本月活跃地图</h2>
-    <div class="row"><span>当前连续做题</span><span id="streak">连续 0 天</span></div>
+    <h2>3 活跃地图</h2>
+    <div class="row"><span>看多久</span>
+      <span class="seg"><button id="vRolling">近 12 周</button><button id="vMonth" class="on">本月</button></span></div>
+    <div class="row"><span>连续做题 · 跨月滚动</span><span id="streak">连续 0 天</span></div>
     <div class="calhead"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
     <div class="cal" id="cal"></div>
     <div class="legend">
-      <span>未做</span><i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i><span>多做</span>
+      <span>未做</span><i class="lv0"></i><span>1–5</span><i class="lv1"></i><span>6–15</span><i class="lv2"></i><span>16–30</span><i class="lv3"></i><span>31+ 题</span><i class="lv4"></i>
     </div>
-    <div class="row" style="margin-top:12px"><span>本月累计</span><span id="monthstat">—</span></div>
+    <div class="hint" id="calHint">虚线格是还没到的日子，不计入累计；切「近 12 周」可看跨月连续记录</div>
+    <div class="row" style="margin-top:12px"><span id="statLabel">本月累计</span><span id="monthstat">—</span></div>
   </div>
 
   <div class="card">
@@ -161,7 +164,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">56655f5f2d3c</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">1cbad0311a2a</span></div>
 </div>
 
 <!--PWA-UPDATE-->

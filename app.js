@@ -422,28 +422,70 @@ function calcStreak(){
   while(hist[dateKey(d)] > 0){ s++; d.setDate(d.getDate()-1); }
   return s;
 }
-/** 本月活跃地图：按当天做题数分 5 级着色，今天加黑框 */
-function renderCalendar(){
-  const now = new Date(), y = now.getFullYear(), m = now.getMonth();
-  const lead = (new Date(y,m,1).getDay()+6)%7;          // 周一开头
-  const days = new Date(y,m+1,0).getDate();
-  const hist = S.history || {};
-  let html = "", monthQ = 0, monthD = 0;
-  for(let i=0;i<lead;i++) html += '<div class="cell empty"></div>';
-  for(let d=1; d<=days; d++){
-    const key = y + "-" + String(m+1).padStart(2,"0") + "-" + String(d).padStart(2,"0");
-    const n = +(hist[key] || 0);
-    monthQ += n; if(n > 0) monthD++;
-    const lv = n===0 ? 0 : (n<20 ? 1 : (n<50 ? 2 : (n<100 ? 3 : 4)));
-    const cur = key === today() ? " cur" : "";
-    html += `<div class="cell lv${lv}${cur}" title="${key} · ${n} 题"><span>${d}</span>` +
-            (n ? `<em>${n}</em>` : "") + `</div>`;
-  }
-  document.getElementById("cal").innerHTML = html;
-  document.getElementById("monthstat").textContent = `${monthQ} 题 · ${monthD} 天有做题`;
-  const s = calcStreak();
-  document.getElementById("streak").textContent = `连续 ${s} 天`;
+/* ---------- 活跃地图 ----------
+ * 默认「本月」；「近 12 周」滚动窗口（84 格，跨月连续可见）作为下钻。
+ * 未来日单独标记，不与「未做」混色；色阶按实际训练量分档，图例标区间。
+ * 视图偏好只存运行时，不写进存档，旧存档天然兼容。 */
+const MAP_WEEKS = 12;
+let mapView = "month";
+/** 做题数 → 色阶：1-5 / 6-15 / 16-30 / 31+ 题。阈值按每日 5–15 分钟定，待真实数据校准 */
+function heatLevel(n){
+  n = +n || 0;
+  return n === 0 ? 0 : (n <= 5 ? 1 : (n <= 15 ? 2 : (n <= 30 ? 3 : 4)));
 }
+function calCell(key, label, hist, tk){
+  const n = +(hist[key] || 0);
+  const fut = key > tk;                       // 未来日 ≠ 未做日
+  const cls = "cell lv" + heatLevel(n) + (fut ? " fut" : "") + (key === tk ? " cur" : "");
+  return '<div class="' + cls + '" title="' + key + ' · ' + n + ' 题"><span>' + label + '</span>' +
+         (n ? '<em>' + n + '</em>' : '') + '</div>';
+}
+/** 近 12 周：以「今天所在周的周一」往前 11 周为起点，共 84 格，行=周、列=星期 */
+function renderRolling(hist, tk){
+  const end = new Date(); end.setHours(0,0,0,0);
+  const back = (end.getDay()+6)%7 + (MAP_WEEKS-1)*7;
+  const start = new Date(end); start.setDate(end.getDate() - back);
+  let html = "", q = 0, d = 0;
+  for(let i=0;i<MAP_WEEKS*7;i++){
+    const day = new Date(start); day.setDate(start.getDate() + i);
+    const key = dateKey(day);
+    if(key <= tk){ const n = +(hist[key] || 0); q += n; if(n > 0) d++; }
+    html += calCell(key, day.getDate(), hist, tk);
+  }
+  return {html:html, q:q, d:d};
+}
+/** 本月：保留自然月口径，仅补未来日标记 */
+function renderMonth(hist, tk){
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+  const lead = (new Date(y,m,1).getDay()+6)%7;
+  const days = new Date(y,m+1,0).getDate();
+  let html = "", q = 0, d = 0;
+  for(let i=0;i<lead;i++) html += '<div class="cell empty"></div>';
+  for(let i=1;i<=days;i++){
+    const key = y + "-" + String(m+1).padStart(2,"0") + "-" + String(i).padStart(2,"0");
+    if(key <= tk){ const n = +(hist[key] || 0); q += n; if(n > 0) d++; }
+    html += calCell(key, i, hist, tk);
+  }
+  return {html:html, q:q, d:d};
+}
+function renderCalendar(){
+  const hist = S.history || {}, tk = today();
+  const rolling = mapView === "rolling";
+  const r = rolling ? renderRolling(hist, tk) : renderMonth(hist, tk);
+  const cal = document.getElementById("cal");
+  cal.classList.toggle("rolling", rolling);
+  cal.innerHTML = r.html;
+  document.getElementById("statLabel").textContent = rolling ? "近 12 周累计" : "本月累计";
+  document.getElementById("calHint").textContent = rolling
+    ? "每行一周，共 12 周；虚线格是还没到的日子，不计入累计。切「本月」可看每天做了几题"
+    : "虚线格是还没到的日子，不计入累计；切「近 12 周」可看跨月连续记录";
+  document.getElementById("monthstat").textContent = r.q + " 题 · " + r.d + " 天有做题";
+  document.getElementById("streak").textContent = "连续 " + calcStreak() + " 天";
+  document.getElementById("vRolling").classList.toggle("on", rolling);
+  document.getElementById("vMonth").classList.toggle("on", !rolling);
+}
+document.getElementById("vRolling").onclick = ()=>{ mapView = "rolling"; renderCalendar(); };
+document.getElementById("vMonth").onclick   = ()=>{ mapView = "month";   renderCalendar(); };
 function syncAuto(){
   const on = S.autoNext !== false;
   const b = document.getElementById("autoBtn");
