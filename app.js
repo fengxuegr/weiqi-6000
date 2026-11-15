@@ -148,6 +148,17 @@ const SFX = (function(){
   };
 })();
 
+/* 每日设置白名单：分钟数只能取 <select> 里的那几个值。
+   旧存档 / 别台设备导入的进度码可能带非法值（如 7），统一夹住，避免目标口径分裂。
+   注意：load() 在文件很靠前就会执行，这里只能用函数声明（会提升），不能用顶层 const/let。 */
+function clampMin(v){
+  const n = +v;
+  return [5,8,10,15,20,25,30,45,60].includes(n) ? n : 10;
+}
+function clampCount(v){
+  const n = Math.round(+v);
+  return Number.isFinite(n) ? Math.max(5, Math.min(2000, n)) : DAILY;
+}
 function fresh(){
   return {v:3, lv:0, mode:"strict", dailyMode:"time", dailyCount:DAILY, dailyMin:10,
           st:{}, wrong:{}, retry:{}, q:{}, sfx:{on:true, vol:0.45}, autoNext:true,
@@ -163,10 +174,11 @@ function load(){
       }
       o.v = 3;
       o.dailyMode = o.dailyMode || "time";
-      o.dailyCount = o.dailyCount || DAILY;
-      o.dailyMin = o.dailyMin || 10;
+      o.dailyCount = clampCount(o.dailyCount);
+      o.dailyMin = clampMin(o.dailyMin);
       o.history = o.history || {};
-      o.q = o.q || {};          // 每题首答记录 [首答对错, 累计错点, 首手耗时ms, 最近做对日期]
+      // 每题首答记录 [首答对错, 累计错点, 首手耗时ms, 最近做对日期]；旧格式/损坏值直接丢掉
+      o.q = (o.q && typeof o.q === "object" && !Array.isArray(o.q)) ? o.q : {};
       o.retry = o.retry || {};  // 待重做（点了错因看答案的题）
       o.sfx = o.sfx || {on:true, vol:0.45};
       if(o.autoNext === undefined) o.autoNext = true;
@@ -200,14 +212,19 @@ function wrongOf(i){
 function qRec(lv, idx){
   if(!S.q[lv]) S.q[lv] = {};
   let r = S.q[lv][idx];
-  if(!r){ r = [null, 0, 0, 0]; S.q[lv][idx] = r; }
+  if(!Array.isArray(r)){ r = [null, 0, 0, 0]; S.q[lv][idx] = r; }
   return r;
 }
 /** 首答正确率——唯一能区分"会"和"记得上次点这里"的指标 */
 function firstStat(lv){
   const o = S.q[lv] || {};
   let okN = 0, allN = 0;
-  for(const k in o){ const f = o[k][0]; if(f === 1 || f === 0){ allN++; if(f === 1) okN++; } }
+  for(const k in o){
+    const r = o[k];
+    if(!Array.isArray(r)) continue;      // 旧格式 / 损坏记录跳过，别让首页渲染整段崩掉
+    const f = r[0];
+    if(f === 1 || f === 0){ allN++; if(f === 1) okN++; }
+  }
   return allN ? {rate: Math.round(okN/allN*100), okN, allN} : null;
 }
 /** 本轮要做哪些题号（0-based）：待重做的插到最前面，其余按题号 */
@@ -252,8 +269,9 @@ function renderWho(){
       if(o && o.st){
         let done = 0;
         Object.keys(o.st).forEach(k=>{ done += Object.keys(o.st[k].done || {}).length; });
-        const pass = (o.st[0] && o.st[0].pass) || 1;
-        sub = `第 ${pass} 轮 · 累计 ${done} 题`;
+        const lv = Number.isInteger(o.lv) ? Math.max(0, Math.min(DATA.length-1, o.lv)) : 0;
+        const pass = (o.st[lv] && o.st[lv].pass) || 1;
+        sub = `当前档第 ${pass} 轮 · 累计 ${done} 题`;
       }
     }catch(e){}
     html += `<div class="prow${p.id === cur ? " on" : ""}" data-id="${p.id}">` +
@@ -446,23 +464,23 @@ function syncDaily(){
   document.getElementById("mCount").classList.toggle("on", S.dailyMode==="count");
   document.getElementById("mTime").classList.toggle("on", S.dailyMode==="time");
   const nc = document.getElementById("numCount"), sm = document.getElementById("selMin");
+  // 先夹到合法值再回填；旧版把非法值塞给 <select> 后 value 变 ""，反向读回就成了 0
+  S.dailyCount = clampCount(S.dailyCount);
+  S.dailyMin = clampMin(S.dailyMin);
   nc.value = S.dailyCount;
   sm.value = String(S.dailyMin);
-  if(sm.value !== String(S.dailyMin)){ S.dailyMin = +sm.value; }
   document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", +c.dataset.n === S.dailyCount));
 }
 document.getElementById("mFree").onclick = ()=>{ S.dailyMode="free"; save(); renderHome(); };
 document.getElementById("mCount").onclick = ()=>{ S.dailyMode="count"; save(); renderHome(); };
 document.getElementById("mTime").onclick = ()=>{ S.dailyMode="time"; save(); renderHome(); };
 document.getElementById("numCount").onchange = (e)=>{
-  let v = Math.round(+e.target.value || DAILY);
-  v = Math.max(5, Math.min(2000, v));
-  S.dailyCount = v; save(); renderHome();
+  S.dailyCount = clampCount(e.target.value); save(); renderHome();
 };
 document.querySelectorAll(".chip").forEach(c=>{
-  c.onclick = ()=>{ S.dailyCount = +c.dataset.n; save(); renderHome(); };
+  c.onclick = ()=>{ S.dailyCount = clampCount(c.dataset.n); save(); renderHome(); };
 });
-document.getElementById("selMin").onchange = (e)=>{ S.dailyMin = +e.target.value; save(); renderHome(); };
+document.getElementById("selMin").onchange = (e)=>{ S.dailyMin = clampMin(e.target.value); save(); renderHome(); };
 document.getElementById("autoBtn").onclick = ()=>{
   S.autoNext = (S.autoNext === false);   // 取反
   save(); renderHome();
@@ -607,8 +625,8 @@ function applyPortable(o){
   S.lv = Math.max(0, Math.min(DATA.length-1, +o.lv || 0));
   S.mode = o.mode === "compact" ? "compact" : "strict";
   S.dailyMode = o.dailyMode || "time";
-  S.dailyCount = +o.dailyCount || DAILY;
-  S.dailyMin = +o.dailyMin || 10;
+  S.dailyCount = clampCount(o.dailyCount);
+  S.dailyMin = clampMin(o.dailyMin);
   S.st = unpackSt(o.st || {});
   S.retry = unpackIdx(o.retry || {});
   if(o.wrong){
@@ -665,7 +683,10 @@ async function decodeCode(code){
   }
   return new TextDecoder().decode(bytes);
 }
-/** 把进度码画成二维码。码里塞的是「带 hash 的 URL」，另一台扫了直接打开本页并自动导入。 */
+/** 把进度码画成二维码。
+ *  网页版塞「带 hash 的 URL」，另一台扫了直接打开本页自动导入；
+ *  单文件版是 file://，拼出来的只会是本机磁盘路径，改成塞「纯进度码」，
+ *  另一台用「扫码导入」对准即可（pickCode 两种格式都认）。 */
 function showQr(code){
   const box = document.getElementById("qrBox");
   const tip = document.getElementById("qrHint");
@@ -673,14 +694,20 @@ function showQr(code){
   const hideAll = ()=>{ box.classList.add("hide"); if(tip) tip.classList.add("hide"); };
   if(typeof qrcode !== "function"){ hideAll(); return; }
   const safe = code.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const url = location.origin + location.pathname + "#p=" + safe;
+  const web = !location.protocol || /^https?:$/.test(location.protocol);
+  const content = web ? (location.origin + location.pathname + "#p=" + safe) : code;
   try{
     const qr = qrcode(0, "M");
-    qr.addData(url);
+    qr.addData(content);
     qr.make();
     box.innerHTML = qr.createSvgTag(4, 2);
     box.classList.remove("hide");
-    if(tip) tip.classList.remove("hide");
+    if(tip){
+      tip.textContent = web
+        ? "用另一台设备打开本页 → 点「扫码导入」对准这个码"
+        : "这是进度码本身 · 用另一台设备的网页版点「扫码导入」对准它";
+      tip.classList.remove("hide");
+    }
   }catch(e){ hideAll(); }
 }
 
@@ -747,6 +774,7 @@ function renderWrong(){
 function startCustom(list){
   SFX.unlock();
   ok = 0; bad = 0; sessN = 0; timeUp = false; requeued = {}; stopTimer();
+  customMode = true; clearSess();   // 重练不留旧快照，也别让下次正常练习恢复成重练队列
   running = false; remaining = 0;
   document.getElementById("clock").textContent = "重练";
   document.getElementById("pauseMask").classList.add("hide");
@@ -1095,6 +1123,7 @@ let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数�
 let sessLast = 0, secCarry = 0, hiddenPause = false; // 时间戳基准 / 不足1秒零头 / 是否因切后台自动暂停
 let autoTimer = null;                              // 答对后自动进下一题的定时器
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
+let customMode = false;                            // 当前是不是错题重练（快照要打标记，别被正常练习恢复）
 let lastCapCount = 0;                              // 最后一手吃了几子（吃子那手多留时间看清棋形）
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
@@ -1142,7 +1171,7 @@ function saveSess(){
   if(!cur) return;
   S.sess = { day: today(), at: Date.now(), lv: S.lv, pass: lvSt(S.lv).pass, mode: S.dailyMode,
              left: remaining, queue: queue.slice(), cur: curIdx,
-             done: sessN, sec: sessSec };
+             done: sessN, sec: sessSec, custom: customMode };
   save();
 }
 function clearSess(){ if(S.sess){ S.sess = null; save(); } }
@@ -1154,6 +1183,7 @@ function validSess(){
   if(s.lv !== S.lv) return null;
   if(s.pass !== lvSt(S.lv).pass) return null;
   if(s.mode !== S.dailyMode) return null;
+  if(s.custom) return null;            // 错题重练的队列不能当成正常练习接着做
   return s;
 }
 
@@ -1192,6 +1222,7 @@ function addFiveMinutes(){
   document.getElementById("pause").classList.remove("hide");
   document.getElementById("pause").textContent = "暂停";
   const st = lvSt(S.lv);
+  requeued = {};                    // 队列重建了，之前「本会话已重排」的标记要一并清掉
   queue = planList(S.lv).filter(k => !st.done[k]);
   startSecClock(0);
   startCountdown(5 * 60 * 1000);
@@ -1226,6 +1257,7 @@ document.getElementById("start").onclick = ()=>{
   const all = planList(S.lv).filter(k => !st.done[k]);
   const snap = validSess();
 
+  customMode = false;
   ok = 0; bad = 0; sessN = 0; timeUp = false; requeued = {}; stopTimer();
   running = false; remaining = 0;
   document.getElementById("clock").textContent = "";
@@ -1285,7 +1317,7 @@ document.getElementById("quit").onclick = ()=>{
 function scheduleAutoNext(){
   clearTimeout(autoTimer); autoTimer = null;
   if(S.autoNext === false) return;
-  const n = (cur && cur.q) ? cur.q.length : 1;
+  const n = Math.max(1, step);       // 按实际走过的手数停留，短线路不再按第一条长线路多等
   let delay = Math.min(1800, 900 + 150 * (n - 1));     // 单步 900ms，9 手封顶 1800ms
   if(lastCapCount > 0) delay = Math.min(2600, delay + 700);  // 刚吃了子，多留一会儿看清空出来的点
   autoTimer = setTimeout(()=>{ if(answered && !paused && !timeUp) nextQ(); }, delay);
@@ -1416,7 +1448,9 @@ function draw(from){
 }
 function solved(capText){
   answered = true; ok++; sessN++; SFX.ok();
-  const st = lvSt(S.lv); if(!st.done[curIdx]) st.done[curIdx] = 1;
+  const st = lvSt(S.lv);
+  // 错题重练可能带来超出本轮目标的题号，别写成「幽灵完成记录」让首页完成数虚高
+  if(curIdx < goalOf(S.lv, st.pass) && !st.done[curIdx]) st.done[curIdx] = 1;
   const r = qRec(S.lv, curIdx);
   r[3] = today();
   if(S.retry[S.lv]) delete S.retry[S.lv][curIdx];
