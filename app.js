@@ -189,7 +189,10 @@ function lvSt(i){
   if(!S.st[i]) S.st[i] = {pass:1, done:{}};
   return S.st[i];
 }
-function goalOf(i, pass){ return Math.min(100*pass, DATA[i].n); }
+/** 每轮目标：前 9 轮按 100×轮次递增；最后一轮直接做满整档，
+ *  把题库末尾那 19~23 道零头也刷完（否则 6124 题永远只能覆盖 6000 题）。
+ *  手动设置进度、进入下一轮的文案都走这里，避免同一个上限写死在多处。 */
+function goalOf(i, pass){ return pass >= 10 ? DATA[i].n : Math.min(100*pass, DATA[i].n); }
 function wrongOf(i){
   const o = S.wrong[i] || {}; return Object.keys(o).map(Number).sort((a,b)=>a-b);
 }
@@ -380,7 +383,7 @@ function renderHome(){
       " · 错题 " + wrongOf(S.lv).length + " 道";
     document.getElementById("nextpass").textContent = st.pass >= 10
       ? "本级 10 轮已走完"
-      : "进入第 " + (st.pass + 1) + " 轮（要做 " + (100 * (st.pass + 1)) + " 题）";
+      : "进入第 " + (st.pass + 1) + " 轮（要做 " + goalOf(S.lv, st.pass + 1) + " 题）";
   }
   const sn = list.length ? validSess() : null;
   if(list.length && sn && S.dailyMode === "time"){
@@ -770,7 +773,7 @@ function fillManualLevels(){
 function syncManual(){
   const lv = +document.getElementById("mLevel").value || 0;
   const pass = Math.max(1, Math.min(10, +document.getElementById("mPass").value || 1));
-  const cap = Math.min(100 * pass, DATA[lv].n);
+  const cap = goalOf(lv, pass);
   const md = document.getElementById("mDone");
   md.max = String(cap);
   document.getElementById("mHint").textContent =
@@ -781,7 +784,7 @@ document.getElementById("mPass").onchange = syncManual;
 document.getElementById("mApply").onclick = ()=>{
   const lv = Math.max(0, Math.min(DATA.length-1, +document.getElementById("mLevel").value || 0));
   const pass = Math.max(1, Math.min(10, +document.getElementById("mPass").value || 1));
-  const cap = Math.min(100 * pass, DATA[lv].n);
+  const cap = goalOf(lv, pass);
   let k = Math.round(+document.getElementById("mDone").value || 0);
   k = Math.max(0, Math.min(cap, k));
   if(!confirm("把「" + pname(PID) + "」的 " + DATA[lv].lb + " 设为：第 " + pass + " 轮、第 1–" + k + " 题已完成。\n该档现有的完成记录会被覆盖，确定吗？")) return;
@@ -1088,17 +1091,51 @@ let queue = [], cur = null, curIdx = -1, alive = [], cell = 20, ox = 0, oy = 0, 
 /* curIdx 单独存题号，不再往 DATA 的题目对象上挂 _i 字段。
    alive = 当前仍与「已走序列」一致的正解线路候选集，跨手保持（见 branchStep）。 */
 let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
-let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数（暂停时不计）
+let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数（整数秒，暂停时不计）
+let sessLast = 0, secCarry = 0, hiddenPause = false; // 时间戳基准 / 不足1秒零头 / 是否因切后台自动暂停
 let autoTimer = null;                              // 答对后自动进下一题的定时器
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
 let lastCapCount = 0;                              // 最后一手吃了几子（吃子那手多留时间看清棋形）
 
 function stopTimer(){ if(tickId){ clearInterval(tickId); tickId = null; } }
-function stopSecClock(){ if(secTick){ clearInterval(secTick); secTick = null; } }
+/** 把「上次结算到现在」的可见时长结进 sessSec。
+ *  用时间戳差值而不是数定时器次数：切后台会先结算再停，回来重置基准，
+ *  后台节流 / 设备休眠都不会把十几分钟算进来。单次最多 5 秒，与倒计时 tick 同思路。
+ *  不足 1 秒的零头留在 secCarry，sessSec 始终是整数秒，原有显示与存档逻辑不用改。 */
+function settleSec(){
+  if(paused || !sessLast) return;
+  const now = Date.now();
+  const d = Math.min(5000, Math.max(0, now - sessLast));
+  secCarry += d;
+  const add = Math.floor(secCarry / 1000);
+  if(add){ sessSec += add; secCarry -= add * 1000; }
+  sessLast = now;               // 基准取同一个时刻，避免毫秒级漂移
+}
+function stopSecClock(){
+  if(secTick) clearInterval(secTick);
+  secTick = null;       // 无条件标记「已停」，不依赖 interval 返回值的真假
+  settleSec();          // 停之前把最后一段零头结掉
+  sessLast = 0;         // 0 = 已停，后台期间不再累计
+}
 function startSecClock(init){
-  sessSec = init || 0; paused = false; stopSecClock();
-  // 每秒累加一次；暂停或时间到就停，切后台由 visibilitychange 置 paused
-  secTick = setInterval(()=>{ if(!paused && !timeUp) sessSec++; }, 1000);
+  stopSecClock();                        // 先结掉并停掉旧时钟
+  sessSec = init || 0; secCarry = 0;
+  paused = false; hiddenPause = false;
+  sessLast = Date.now();
+  secTick = setInterval(()=>{ if(!paused && !timeUp) settleSec(); }, 1000);
+}
+/** 只暂停 / 恢复秒表，与「有没有倒计时」(running) 解耦。
+ *  auto=true 表示切后台自动暂停，回到前台会自动续上，不弹遮罩也不要求点「继续」。 */
+function pauseSec(auto){
+  if(paused || timeUp) return;
+  stopSecClock(); paused = true;
+  if(auto) hiddenPause = true;
+}
+function resumeSec(){
+  if(!paused || timeUp) return;
+  paused = false; hiddenPause = false;
+  sessLast = Date.now();
+  if(!secTick) secTick = setInterval(()=>{ if(!paused && !timeUp) settleSec(); }, 1000);
 }
 /** 把「这次做到哪儿了」存下来。只在题与题之间存，恢复时当前题从头开始。 */
 function saveSess(){
@@ -1123,6 +1160,7 @@ function validSess(){
 function endSession(){
   if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
   if(sessSec > 0){ S.today.sec = (S.today.sec || 0) + sessSec; sessSec = 0; }
+  secCarry = 0;
   save();
 }
 /** 倒计时按"实际在做题的时间"累计，暂停/切后台都不走表 */
@@ -1168,14 +1206,17 @@ function startCountdown(ms){
 }
 function pauseSession(){
   if(!running || timeUp) return;
-  running = false; paused = true; stopTimer(); saveSess();
+  running = false; stopTimer();
+  pauseSec(false);                 // 秒表一并结算并停，不再直接改 paused
+  saveSess();
   document.getElementById("pause").textContent = "继续";
   document.getElementById("pauseMask").classList.remove("hide");
 }
 function resumeSession(){
   if(timeUp || running) return;
-  running = true; paused = false; lastTick = Date.now();
+  running = true; lastTick = Date.now();
   stopTimer(); tickId = setInterval(tick, 250);
+  resumeSec();                     // 秒表恢复
   document.getElementById("pause").textContent = "暂停";
   document.getElementById("pauseMask").classList.add("hide");
 }
@@ -1484,13 +1525,21 @@ document.getElementById("whoBtn").onclick = ()=>{
   p.classList.toggle("hide");
 };
 
-/* 暂停/继续 + 切到后台自动暂停（孩子被叫走时不烧时间） */
+/* 暂停/继续 + 切到后台自动暂停（孩子被叫走时不烧时间）
+ * 固定时间模式沿用原有「暂停」交互（弹遮罩、回来点继续）；
+ * 自由 / 固定题数 / 错题重练没有倒计时，只停秒表，回前台自动续上，避免卡死。 */
 document.getElementById("pause").onclick = ()=>{
   if(running) pauseSession(); else resumeSession();
 };
-document.addEventListener("visibilitychange", ()=>{
-  if(document.visibilityState === "hidden") pauseSession();
-});
+function onVisibility(){
+  if(document.visibilityState === "hidden"){
+    if(running && !timeUp){ pauseSession(); return; }   // 内部已 saveSess
+    pauseSec(true); saveSess();
+  } else if(hiddenPause){
+    resumeSec();
+  }
+}
+document.addEventListener("visibilitychange", onVisibility);
 
 /* 扫码打开本页时，hash 里带进度码 → 自动尝试导入 */
 handleIncomingHash();
@@ -1513,7 +1562,8 @@ document.getElementById("resetToday").onclick = ()=>{
   S.today = {d: today(), n: 0, sec: 0};
   if(S.history) delete S.history[today()];
   S.sess = null;
-  running = false; remaining = 0; sessSec = 0;
-  stopTimer(); stopSecClock();
+  running = false; remaining = 0;
+  stopTimer(); stopSecClock();      // 先结算并停，再清零，避免残留零头串到下次会话
+  sessSec = 0; secCarry = 0; sessLast = 0;
   save(); renderHome();
 };
