@@ -192,6 +192,7 @@ function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMon
 function dateKey(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 /** 每答对一题记一次：同时更新今日计数和活跃地图的按日历史 */
 function markDone(){
+  if(importUndo) clearUndoImport();          // 一旦产生新题，导入撤销即失效（D-02）
   if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
   S.today.n++;
   if(!S.history) S.history = {};
@@ -402,12 +403,17 @@ function renderHome(){
     document.getElementById("nextpass").textContent = st.pass >= 10
       ? "本级 10 轮已走完"
       : "进入第 " + (st.pass + 1) + " 轮（要做 " + goalOf(S.lv, st.pass + 1) + " 题）";
+    document.getElementById("nextpass").disabled = st.pass >= 10;
   }
   const sn = list.length ? validSess() : null;
-  if(list.length && sn && S.dailyMode === "time"){
-    const mm = Math.floor((sn.left || 0) / 60000), ss = Math.floor(((sn.left || 0) % 60000) / 1000);
-    document.getElementById("start").textContent =
-        "继续上次（还剩 " + mm + ":" + String(ss).padStart(2, "0") + "）";
+  if(list.length && sn){
+    if(S.dailyMode === "time"){
+      const mm = Math.floor((sn.left || 0) / 60000), ss = Math.floor(((sn.left || 0) % 60000) / 1000);
+      document.getElementById("start").textContent =
+          "继续上次（还剩 " + mm + ":" + String(ss).padStart(2, "0") + "）";
+    } else {
+      document.getElementById("start").textContent = "接着上次";
+    }
   } else {
     document.getElementById("start").textContent = "开始做题";
   }
@@ -468,6 +474,21 @@ function renderMonth(hist, tk){
   }
   return {html:html, q:q, d:d};
 }
+/** 近 12 周每日明细：折叠表，完整 YYYY-MM-DD，触屏可读（A-08） */
+function renderCalDetail(hist, tk){
+  const end = new Date(); end.setHours(0,0,0,0);
+  const back = (end.getDay()+6)%7 + (MAP_WEEKS-1)*7;
+  const start = new Date(end); start.setDate(end.getDate() - back);
+  let html = '<table class="calTable"><thead><tr><th scope="col">日期</th><th scope="col">题数</th><th scope="col">状态</th></tr></thead><tbody>';
+  for(let i=0;i<MAP_WEEKS*7;i++){
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const key = dateKey(d), n = +(hist[key] || 0), fut = key > tk;
+    html += '<tr><td>' + key + '</td><td>' + (fut ? "—" : n + " 题") + '</td><td>' +
+            (fut ? "未到" : (n > 0 ? "有做题" : "未做")) + '</td></tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById("calDetail").innerHTML = html;
+}
 function renderCalendar(){
   const hist = S.history || {}, tk = today();
   const rolling = mapView === "rolling";
@@ -475,6 +496,7 @@ function renderCalendar(){
   const cal = document.getElementById("cal");
   cal.classList.toggle("rolling", rolling);
   cal.innerHTML = r.html;
+  renderCalDetail(hist, tk);
   document.getElementById("statLabel").textContent = rolling ? "近 12 周累计" : "本月累计";
   document.getElementById("calHint").textContent = rolling
     ? "每行一周，共 12 周；虚线格是还没到的日子，不计入累计。切「本月」可看每天做了几题"
@@ -493,11 +515,13 @@ function syncAuto(){
   b.classList.toggle("on", on);
 }
 function syncSfx(){
-  const on = !S.sfx || S.sfx.on !== false;
+  const s = S.sfx || {on:true, vol:0.45};
+  const vol = s.vol == null ? 0.45 : +s.vol;
+  const on = s.on !== false && vol > 0.001;   // 音量为 0 时不算「开」
   const b = document.getElementById("sfxBtn");
   b.textContent = on ? "开" : "关";
   b.classList.toggle("on", on);
-  document.getElementById("sfxVol").value = Math.round((S.sfx && S.sfx.vol != null ? S.sfx.vol : 0.45) * 100);
+  document.getElementById("sfxVol").value = Math.round(vol * 100);
 }
 function syncDaily(){
   document.getElementById("rowCount").style.display = S.dailyMode==="count" ? "flex" : "none";
@@ -531,13 +555,12 @@ document.getElementById("autoBtn").onclick = ()=>{
 document.getElementById("sfxBtn").onclick = ()=>{
   S.sfx = S.sfx || {on:true, vol:0.45};
   S.sfx.on = !S.sfx.on; save(); renderHome();
-  if(S.sfx.on) SFX.stone();
+  if(S.sfx.on && (S.sfx.vol == null ? 0.45 : +S.sfx.vol) > 0.001) SFX.stone();
 };
 document.getElementById("sfxVol").oninput = (e)=>{
   S.sfx = S.sfx || {on:true, vol:0.45};
   S.sfx.vol = Math.max(0, Math.min(100, +e.target.value)) / 100;
-  const b = document.getElementById("sfxBtn");
-  b.textContent = S.sfx.vol > 0.001 ? "开" : "关";
+  syncSfx();
 };
 document.getElementById("sfxVol").onchange = ()=>{ save(); SFX.stone(); };
 document.getElementById("nextpass").onclick = ()=>{
@@ -896,17 +919,39 @@ async function importFromCode(code){
   if(o.m) bits.push("活跃地图");
   const tail = bits.length ? bits.join("、") + "会一起带过来；首答记录保留本机，确定吗？"
                            : "首答记录保留本机，确定吗？";
+  const curSt = lvSt(S.lv), curDone = Object.keys(curSt.done || {}).length;
+  const localLine = "本机现在是「" + pname(PID) + "」 · " + DATA[S.lv].lb + " · 第 " +
+                    curSt.pass + " 轮 · 已完成 " + curDone + " 题";
   const msg = "来自「" + (src || "另一台设备") + "」：" + lb + " · 第 " + pass + " 轮。\n" +
-              where + "。\n" + tail;
+              localLine + "。\n" + where + "。\n" + tail;
   if(!confirm(msg)) return false;
+  importUndo = JSON.stringify(S); importUndoPid = PID;   // 单次内存态快照，不落盘
   if(targetId !== PID) switchProfile(targetId);
   if(renameTo) renameProfile(PID, renameTo);
   applyPortable(o); renderHome();
+  showUndoImport();
   return "「" + pname(PID) + "」 · " + lb + " · 第 " + pass + " 轮";
 }
+/* 撤销导入：仅当前页面有效；开始做题或切换档案即失效（D-02） */
+let importUndo = null, importUndoPid = null;
+function clearUndoImport(){
+  importUndo = null; importUndoPid = null;
+  const bar = document.getElementById("undoBar");
+  if(bar) bar.classList.add("hide");
+}
+function showUndoImport(){
+  const bar = document.getElementById("undoBar");
+  if(bar) bar.classList.remove("hide");
+}
+document.getElementById("undoImport").onclick = ()=>{
+  if(!importUndo) return;
+  if(importUndoPid !== PID){ clearUndoImport(); alert("档案已切换，无法撤销这次导入"); return; }
+  S = JSON.parse(importUndo); clearUndoImport(); save(); renderHome();
+  alert("已撤销导入，进度恢复到导入前");
+};
 
 document.getElementById("mkCode").onclick = async ()=>{
-  const hint = document.getElementById("codeHint");
+  const hint = document.getElementById("codeResult");
   try{
     const code = await encodeCode(makePortable(
       document.getElementById("withWrong").checked,
@@ -1141,14 +1186,22 @@ document.getElementById("qrFile").onchange = async (e)=>{
   }
 };
 
-/* 手滑点错了：不记错因、不给答案，直接回到继续想 */
+/* 手滑点错了：不记错因、不给答案，回滚「本次错」与累计错点（A-13） */
 document.getElementById("oops").onclick = ()=>{
+  if(paused) return;
   document.getElementById("types").classList.add("hide");
   const marks = document.getElementById("marks");
   if(marks) marks.innerHTML = "";
   const fb = document.getElementById("fb");
   fb.className = "fb";
   fb.textContent = "好，接着想。点对了才算过";
+  if(preWrong){
+    bad = preWrong.bad;
+    qRec(S.lv, curIdx)[1] = preWrong.wrongCount;
+    document.getElementById("iw").textContent = bad;
+    save();
+    preWrong = null;
+  }
 };
 
 document.getElementById("scanCancel").onclick = ()=>{
@@ -1158,6 +1211,7 @@ document.getElementById("scanCancel").onclick = ()=>{
 
 /* ---------- 做题 ---------- */
 let queue = [], cur = null, curIdx = -1, alive = [], cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
+let preWrong = null;   // 一次误触前的「本次错」快照，进下一题即清空
 /* curIdx 单独存题号，不再往 DATA 的题目对象上挂 _i 字段。
    alive = 当前仍与「已走序列」一致的正解线路候选集，跨手保持（见 branchStep）。 */
 let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
@@ -1249,7 +1303,7 @@ function tick(){
     timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); clearSess(); SFX.timeup();
     document.getElementById("pause").classList.add("hide");
     document.getElementById("addTime").classList.remove("hide");
-    document.getElementById("fb").className = "fb ok";
+    document.getElementById("fb").className = "fb";
     document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工" +
         ((S.today.sec || 0) >= S.dailyMin*60 ? "（今天的 " + S.dailyMin + " 分钟够了）" : "");
   }
@@ -1277,11 +1331,15 @@ function startCountdown(ms){
   remaining = ms; running = true; lastTick = Date.now();
   stopTimer(); tickId = setInterval(tick, 250); tick();
 }
+function setTypesDisabled(on){
+  document.querySelectorAll("#types button").forEach(b=>{ b.disabled = on; });
+}
 function pauseSession(){
   if(!running || timeUp) return;
   running = false; stopTimer();
   pauseSec(false);                 // 秒表一并结算并停，不再直接改 paused
   saveSess();
+  setTypesDisabled(true);          // 暂停时错因区不可点（A-14）
   document.getElementById("pause").textContent = "继续";
   document.getElementById("pauseMask").classList.remove("hide");
 }
@@ -1290,6 +1348,7 @@ function resumeSession(){
   running = true; lastTick = Date.now();
   stopTimer(); tickId = setInterval(tick, 250);
   resumeSec();                     // 秒表恢复
+  setTypesDisabled(false);
   document.getElementById("pause").textContent = "暂停";
   document.getElementById("pauseMask").classList.add("hide");
 }
@@ -1367,7 +1426,9 @@ function scheduleAutoNext(){
 
 function nextQ(){
   clearTimeout(autoTimer); autoTimer = null;
-  if(timeUp){ document.getElementById("fb").className="fb ok";
+  preWrong = null;
+  document.getElementById("nextAfterWrong").classList.add("hide");
+  if(timeUp){ document.getElementById("fb").className="fb";
               document.getElementById("fb").textContent="时间到，点右上「返回」看今天的进度"; return; }
   // 旧存档 / 换设备导入的错题号可能超出当前题库，逐条跳过，别让 cur 变成 undefined 崩掉整页
   let idx = null;
@@ -1498,9 +1559,15 @@ function solved(capText){
   if(S.retry[S.lv]) delete S.retry[S.lv][curIdx];
   markDone();
   document.getElementById("ir").textContent = ok;
-  document.getElementById("fb").className = "fb ok";
-  document.getElementById("fb").textContent = "正确 ✔" + (capText || "") +
-      (S.autoNext === false ? " 点棋盘继续下一题" : "");
+  if(timeUp){
+    // 时间到后做完手上这题：直接给收工引导，不再被「正确 ✔」覆盖（A-15）
+    document.getElementById("fb").className = "fb";
+    document.getElementById("fb").textContent = "正确 ✔ · 今天到这儿，点右上「返回」看今天的进度";
+  } else {
+    document.getElementById("fb").className = "fb ok";
+    document.getElementById("fb").textContent = "正确 ✔" + (capText || "") +
+        (S.autoNext === false ? " 点棋盘继续下一题" : "");
+  }
   scheduleAutoNext();
   save();
 }
@@ -1556,8 +1623,10 @@ function onTap(e){
       document.getElementById("fb").textContent = "对，白棋应了一手" + capText + "，继续把这一局走完";
     }
   } else {
+    const rec = qRec(S.lv, curIdx);
+    preWrong = {bad: bad, wrongCount: rec[1]};   // 供「手滑」回滚
     bad++;
-    qRec(S.lv, curIdx)[1]++;
+    rec[1]++;
     save();
     document.getElementById("iw").textContent = bad;
     const marks = document.getElementById("marks");
@@ -1570,6 +1639,7 @@ function onTap(e){
 }
 document.querySelectorAll("#types .typesRow button").forEach(b=>{
   b.onclick = ()=>{
+    if(paused) return;                       // 暂停时不结算错因（A-14）
     if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
     S.wrong[S.lv][curIdx] = b.dataset.t;
     // 看答案 = 这题没做出来：不计完成、不计今日、不进活跃地图，转为待重做
@@ -1590,9 +1660,14 @@ document.querySelectorAll("#types .typesRow button").forEach(b=>{
     if(!timeUp && !requeued[curIdx]){ requeued[curIdx] = 1; queue.push(curIdx); }
     document.getElementById("fb").textContent = "已记错（" + b.dataset.t + "），红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。";
     document.getElementById("types").classList.add("hide");
+    document.getElementById("nextAfterWrong").classList.remove("hide");
     save();
   };
 });
+document.getElementById("nextAfterWrong").onclick = ()=>{
+  document.getElementById("nextAfterWrong").classList.add("hide");
+  nextQ();
+};
 renderHome();
 
 /* 切换面板的开关 */

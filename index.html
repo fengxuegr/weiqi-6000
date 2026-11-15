@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>围棋级位测试6000题</title>
 <link rel="stylesheet" href="style.css">
 <!--PWA-HEAD-->
@@ -27,6 +27,7 @@
     <button id="whoBtn" class="whobtn"><b id="whoName">—</b><i>▾</i></button>
   </div>
   <div class="whoPanel hide" id="whoPanel"></div>
+  <div class="tip hide" id="undoBar">进度已导入 · <button type="button" id="undoImport">撤销导入</button></div>
 <!--PWA-TIP-->
   <div class="tip hide" id="iosTip">点底部「分享」→「添加到主屏幕」，以后全屏打开、断网也能做</div>
 <!--/PWA-TIP-->
@@ -46,13 +47,13 @@
         <text id="ringsub" x="50" y="63" class="rt2">今天</text>
       </svg>
       <div class="proginfo">
-        <div class="row"><span>第 <b id="ppass">1</b> / 10 轮</span><span id="pinfo">—</span></div>
+        <div class="row"><span>本轮 · 第 <b id="ppass">1</b> / 10 轮</span><span id="pinfo">—</span></div>
         <div class="rounds" id="rounds"></div>
         <div class="row"><span>已完成 <b id="pdone">0</b> / <b id="pgoal">100</b> 题</span><span>未做 <b id="pundone">100</b></span></div>
         <div class="row"><span id="ptoday">今天 0 题</span>
           <span><button class="resetBtn" id="resetToday">重置今天</button></span></div>
         <div class="hint" id="ptarget">5–15 均可</div>
-        <div class="row"><span>首答正确率</span><span id="pfirst">—</span></div>
+        <div class="row"><span>本级首答正确率</span><span id="pfirst">—</span></div>
       </div>
     </div>
     <div class="roundDone hide" id="roundDone">
@@ -74,6 +75,10 @@
       <span>未做</span><i class="lv0"></i><span>1–5</span><i class="lv1"></i><span>6–15</span><i class="lv2"></i><span>16–30</span><i class="lv3"></i><span>31+ 题</span><i class="lv4"></i>
     </div>
     <div class="hint" id="calHint">虚线格是还没到的日子，不计入累计；切「近 12 周」可看跨月连续记录</div>
+    <details class="fold" id="calDetailFold">
+      <summary>近 12 周每日明细（含跨月）</summary>
+      <div class="foldbody" id="calDetail"></div>
+    </details>
     <div class="row" style="margin-top:12px"><span id="statLabel">本月累计</span><span id="monthstat">—</span></div>
   </div>
 
@@ -81,11 +86,11 @@
     <h2>4 每日节奏</h2>
     <div class="row"><span>今天按什么停</span>
       <span class="seg"><button id="mFree">自由</button><button id="mCount">固定题数</button><button id="mTime" class="on">固定时间</button></span></div>
-    <div class="row" id="rowCount"><span>每天题数</span>
+    <div class="row" id="rowCount"><label for="numCount">每天题数</label>
       <span class="inline"><input id="numCount" type="number" min="5" max="2000" step="5" value="20">
         <button class="chip" data-n="20">20</button><button class="chip" data-n="50">50</button>
         <button class="chip" data-n="100">100</button><button class="chip" data-n="200">200</button></span></div>
-    <div class="row" id="rowTime"><span>每次时长（分钟）</span>
+    <div class="row" id="rowTime"><label for="selMin">每次时长（分钟）</label>
       <span><select id="selMin"><option>5</option><option>8</option><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option><option>45</option><option>60</option></select></span></div>
     <div class="hint">老师建议每天 5–15 分钟，到点前想停随时点「返回」</div>
     <div class="row"><span>答对后自动下一题</span>
@@ -105,6 +110,7 @@
       <div class="foldbody">
         <p class="hint" style="margin-top:0">进度只存在本机，建议每月生成一次留底</p>
         <button class="btn quiet" id="mkCode">显示本机进度二维码</button>
+        <div class="hint" id="codeResult" aria-live="polite"></div>
         <button class="btn quiet" id="scanCode">扫码导入（用这台设备的相机）</button>
         <label class="btn quiet fileBtn" for="qrFile">从相册选二维码图片</label>
         <input type="file" id="qrFile" accept="image/*" class="fileInput">
@@ -116,21 +122,23 @@
           <button class="btn ghost" id="scanCancel">取消</button>
         </div>
         <canvas id="scanCanvas" class="hide"></canvas>
-        <label class="chk"><input type="checkbox" id="withWrong"> 连错题记录一起搬（码会稍长一点）</label>
-        <label class="chk"><input type="checkbox" id="withMap"> 连活跃地图一起搬（最近 180 天，码会明显变长）</label>
+        <label class="chk"><input type="checkbox" id="withWrong" checked> 连错题记录一起搬（码会稍长一点）</label>
+        <label class="chk"><input type="checkbox" id="withMap" checked> 连活跃地图一起搬（最近 180 天，码会明显变长）</label>
         <div class="hint">从桌面图标打开若相机/相册无反应，可改用 Chrome 打开同一网址操作</div>
-        <div class="hint" id="codeHint">码里含档案名、今天已练时间、轮数、做过哪些题、待重做题；不含首答记录。新设备扫码后会沿用同一个档案名，并接着今天的 5–15 分钟往下练</div>
+        <div class="hint" id="codeSpec">默认会带上档案名、今天已练时间、轮数、做过哪些题、待重做题、错题记录与最近 180 天活跃地图；不含首答记录。取消勾选可缩短二维码。新设备扫码后会沿用同一个档案名，并接着今天的 5–15 分钟往下练</div>
+        <div class="hint" id="codeHint"></div>
       </div>
     </details>
 
     <details class="fold">
       <summary>手动设置进度</summary>
       <div class="foldbody">
-        <div class="row"><span>级别</span><span><select id="mLevel"></select></span></div>
-        <div class="row"><span>第几轮</span><span><input id="mPass" type="number" min="1" max="10" step="1" value="1"></span></div>
-        <div class="row"><span>已做到第几题</span><span><input id="mDone" type="number" min="0" max="1000" step="1" value="0"></span></div>
+        <div class="row"><label for="mLevel">级别</label><span><select id="mLevel"></select></span></div>
+        <div class="row"><label for="mPass">第几轮</label><span><input id="mPass" type="number" min="1" max="10" step="1" value="1"></span></div>
+        <div class="row"><label for="mDone">已做到第几题</label><span><input id="mDone" type="number" min="0" max="1000" step="1" value="0"></span></div>
         <button class="btn ghost" id="mApply">应用（覆盖该档的完成记录）</button>
-        <div class="hint" id="mHint">注意：只填「已做到第几题」时，前面那些题都会算作已完成</div>
+        <div class="hint" id="mWarn">注意：只填「已做到第几题」时，前面那些题都会算作已完成</div>
+        <div class="hint" id="mHint"></div>
       </div>
     </details>
   </div>
@@ -156,6 +164,7 @@
     </div>
     <button class="typesOops" id="oops">手滑点错了 · 继续想</button>
   </div>
+  <button class="btn ghost hide" id="nextAfterWrong">下一题</button>
   <button class="btn ghost hide" id="addTime">再来 5 分钟</button>
   <div class="info">
     <div>本题<b id="iq">—</b></div>
@@ -164,11 +173,17 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">1cbad0311a2a</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家练习 · <span class="ver">952f7f62aa66</span></div>
 </div>
 
 <!--PWA-UPDATE-->
-<div class="updateBar hide" id="updateBar">有新版本 · <b>点这里更新</b></div>
+<div class="updateBar hide" id="updateBar" role="status" aria-live="polite">
+  <span>有新版本 · 更新会重新打开页面，进度已自动保存</span>
+  <span class="updateActs">
+    <button type="button" id="updateGo">点这里更新</button>
+    <button type="button" id="updateLater">稍后</button>
+  </span>
+</div>
 <!--/PWA-UPDATE-->
 
 <script src="vendor/jsqr.js"></script>
@@ -189,26 +204,38 @@
 
   var bar = document.getElementById("updateBar");
   var supported = "serviceWorker" in navigator && location.protocol === "https:";
-  if (!supported) { if (bar) bar.parentNode.removeChild(bar); return; }
+  if (!supported) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); return; }
 
-  var waiting = null;      // 正在排队等接管的新版本
-  var asked = false;       // 用户是否点了"更新"
+  var waiting = null, asked = false, pending = false, snoozed = false;
+  var play = document.getElementById("play");
+  function playing(){ return !!(play && !play.classList.contains("hide")); }
+  function showBar(){ if (bar && !snoozed) bar.classList.remove("hide"); }
+  function hideBar(){ if (bar) bar.classList.add("hide"); }
 
+  // 做题中不打断：挂起，等返回首页再提示（D-03）
   function showUpdate(reg) {
     waiting = reg;
-    if (bar) bar.classList.remove("hide");
+    if (snoozed) return;
+    if (playing()) { pending = true; return; }
+    pending = false;
+    showBar();
+  }
+  if (play && window.MutationObserver) {
+    new MutationObserver(function () {
+      if (pending && !playing()) { pending = false; showBar(); }
+    }).observe(play, { attributes: true, attributeFilter: ["class"] });
   }
 
-  if (bar) {
-    bar.onclick = function () {
-      if (waiting && waiting.waiting) {
-        asked = true;
-        waiting.waiting.postMessage("SKIP_WAITING");   // 通知 SW 立即接管
-      } else {
-        location.reload();                             // 没有等待中的版本，直接重载
-      }
-    };
-  }
+  var go = document.getElementById("updateGo"), later = document.getElementById("updateLater");
+  if (go) go.onclick = function () {
+    if (waiting && waiting.waiting) {
+      asked = true;
+      waiting.waiting.postMessage("SKIP_WAITING");
+    } else {
+      location.reload();
+    }
+  };
+  if (later) later.onclick = function () { snoozed = true; pending = false; hideBar(); };
 
   // 新版本接管后重载页面，用户立刻看到新版
   navigator.serviceWorker.addEventListener("controllerchange", function () {
@@ -217,19 +244,14 @@
 
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js").then(function (reg) {
-      // 已经有等待中的版本（比如上次没点就退出了）
       if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg);
-
       reg.addEventListener("updatefound", function () {
         var nw = reg.installing;
         if (!nw) return;
         nw.addEventListener("statechange", function () {
-          // controller 存在 = 这是升级，不是首次安装
           if (nw.state === "installed" && navigator.serviceWorker.controller) showUpdate(reg);
         });
       });
-
-      // iOS 不会主动查更新，回到前台时补一次
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState !== "visible") return;
         if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg);
