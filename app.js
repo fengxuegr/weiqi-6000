@@ -1084,7 +1084,9 @@ document.getElementById("scanCancel").onclick = ()=>{
 };
 
 /* ---------- 做题 ---------- */
-let queue = [], cur = null, cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
+let queue = [], cur = null, curIdx = -1, alive = [], cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
+/* curIdx 单独存题号，不再往 DATA 的题目对象上挂 _i 字段。
+   alive = 当前仍与「已走序列」一致的正解线路候选集，跨手保持（见 branchStep）。 */
 let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
 let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数（暂停时不计）
 let autoTimer = null;                              // 答对后自动进下一题的定时器
@@ -1102,7 +1104,7 @@ function startSecClock(init){
 function saveSess(){
   if(!cur) return;
   S.sess = { day: today(), at: Date.now(), lv: S.lv, pass: lvSt(S.lv).pass, mode: S.dailyMode,
-             left: remaining, queue: queue.slice(), cur: cur._i,
+             left: remaining, queue: queue.slice(), cur: curIdx,
              done: sessN, sec: sessSec };
   save();
 }
@@ -1252,9 +1254,24 @@ function nextQ(){
   clearTimeout(autoTimer); autoTimer = null;
   if(timeUp){ document.getElementById("fb").className="fb ok";
               document.getElementById("fb").textContent="时间到，点右上「返回」看今天的进度"; return; }
-  if(queue.length === 0){ SFX.done(); clearSess(); document.getElementById("fb").textContent = "本次做完啦，回去看进度"; document.getElementById("fb").className="fb ok"; return; }
-  const idx = queue.shift();
-  cur = DATA[S.lv].p[idx]; cur._i = idx; answered = false; step = 0; placed = [];
+  // 旧存档 / 换设备导入的错题号可能超出当前题库，逐条跳过，别让 cur 变成 undefined 崩掉整页
+  let idx = null;
+  while(queue.length){
+    const k = queue.shift();
+    if(Number.isInteger(k) && k >= 0 && k < DATA[S.lv].p.length){ idx = k; break; }
+  }
+  if(idx === null){
+    // 队列做完：把本次实际做题秒数结进今日，别让秒表在「本次做完啦」页面上继续空转
+    stopSecClock(); endSession();
+    SFX.done(); clearSess();
+    document.getElementById("fb").textContent = "本次做完啦，回去看进度";
+    document.getElementById("fb").className="fb ok";
+    return;
+  }
+  cur = DATA[S.lv].p[idx]; curIdx = idx; answered = false; step = 0; placed = [];
+  // 候选线路跨手保持：原题库用 (20,20) 分隔的是同一棵解答树上的分支，
+  // 分叉点几乎都在黑手，白棋应手在分叉前一致；不能每手重新去 qa 里取第一个命中项
+  alive = (cur.qa && cur.qa.length) ? cur.qa.slice() : [cur.q || []];
   firstJudged = false; t0 = Date.now(); lastCapCount = 0;
   document.getElementById("iq").textContent = "第 " + (idx+1) + " 题";
   document.getElementById("ir").textContent = ok;
@@ -1358,10 +1375,10 @@ function draw(from){
 }
 function solved(capText){
   answered = true; ok++; sessN++; SFX.ok();
-  const st = lvSt(S.lv); if(!st.done[cur._i]) st.done[cur._i] = 1;
-  const r = qRec(S.lv, cur._i);
+  const st = lvSt(S.lv); if(!st.done[curIdx]) st.done[curIdx] = 1;
+  const r = qRec(S.lv, curIdx);
   r[3] = today();
-  if(S.retry[S.lv]) delete S.retry[S.lv][cur._i];
+  if(S.retry[S.lv]) delete S.retry[S.lv][curIdx];
   markDone();
   document.getElementById("ir").textContent = ok;
   document.getElementById("fb").className = "fb ok";
@@ -1369,6 +1386,21 @@ function solved(capText){
       (S.autoNext === false ? " 点棋盘继续下一题" : "");
   scheduleAutoNext();
   save();
+}
+/* 判题纯逻辑，不碰 DOM，供 _smoke.js 直接做全库回归。
+ * lines = 当前仍匹配的正解线路候选集；step = 答案序列指针（恒为偶数，指向孩子要点的黑手）。
+ * 收敛后返回：alive（空 = 判错）、white（自动补的白子，可能为 null）、
+ *            step（推进后的指针）、done（是否已走完某条完整线路）。
+ * 短线路「一步到位」也是题库里的合法正解，所以 done 用 some 而不是取某一条的长度。 */
+function branchStep(lines, step, r, c){
+  const alive = lines.filter(b => { const p = b[step]; return p && p[0] === r && p[1] === c; });
+  if(!alive.length) return {alive, hit:false, white:null, step, done:false};
+  const line = alive[0];
+  let s = step + 1;                                   // 黑手落下
+  const white = s < line.length ? line[s] : null;     // 白棋应手取自收敛后的线路
+  if(white) s++;
+  return {alive, hit:true, white, step:s,
+          done: alive.some(b => s >= b.length)};
 }
 function onTap(e){
   if(paused) return;                                                    // 已暂停，棋盘不响应
@@ -1379,35 +1411,36 @@ function onTap(e){
   const c = Math.round((px - ox) / cell), r = Math.round((py - oy) / cell);
   const rr = r + el._r0, cc = c + el._c0;
   if(rr<0||rr>18||cc<0||cc>18) return;
-  // 多分支：任一分支在当前手数上的点都算正解（原题库用 (20,20) 分隔多条正解线路）
-  const qq = (cur.qa && cur.qa.length) ? cur.qa : [cur.q || []];
-  const cand = qq.filter(b => { const e = b[step]; return e && e[0]===rr && e[1]===cc; });
-  const hit = cand.length > 0;
+  // 在「还活着的线路」里按本手收敛，而不是每手重新去 qa 里取第一个命中项
+  const j = branchStep(alive, step, rr, cc);
+  const hit = j.hit;
 
   // 首答判定：只认本会话的第一手。这是"重新算对"和"记得上次点这里"的唯一分界
-  if(!firstJudged && qq[0].length){
+  if(!firstJudged && alive.length && alive[0].length){
     firstJudged = true;
-    const rec = qRec(S.lv, cur._i);
+    const rec = qRec(S.lv, curIdx);
     if(rec[0] === null){ rec[0] = hit ? 1 : 0; rec[2] = Date.now() - t0; save(); }
   }
 
   if(hit){
-    const b = cand[0], from = placed.length;
-    placed.push([rr, cc, 1]); step++; SFX.stone();
-    if(step < b.length){ placed.push([b[step][0], b[step][1], 2]); step++; setTimeout(()=>SFX.white(), 130); }
+    alive = j.alive;
+    const from = placed.length;
+    placed.push([rr, cc, 1]); SFX.stone();
+    if(j.white){ placed.push([j.white[0], j.white[1], 2]); setTimeout(()=>SFX.white(), 130); }
+    step = j.step;
     // 重画时按规则提子；只把「这一次点击新落的手」吃到的子报出来
     const caps = draw(from);
     lastCapCount = caps;
     if(caps) SFX.capture();
     const capText = caps ? "，提掉 " + caps + " 子" : "";
-    if(step >= b.length) solved(capText);
+    if(j.done) solved(capText);
     else {
       document.getElementById("fb").className = "fb ok";
       document.getElementById("fb").textContent = "对，白棋应了一手" + capText + "，继续把这一局走完";
     }
   } else {
     bad++;
-    qRec(S.lv, cur._i)[1]++;
+    qRec(S.lv, curIdx)[1]++;
     save();
     document.getElementById("iw").textContent = bad;
     const marks = document.getElementById("marks");
@@ -1421,14 +1454,13 @@ function onTap(e){
 document.querySelectorAll("#types .typesRow button").forEach(b=>{
   b.onclick = ()=>{
     if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
-    S.wrong[S.lv][cur._i] = b.dataset.t;
+    S.wrong[S.lv][curIdx] = b.dataset.t;
     // 看答案 = 这题没做出来：不计完成、不计今日、不进活跃地图，转为待重做
     if(!S.retry[S.lv]) S.retry[S.lv] = {};
-    S.retry[S.lv][cur._i] = 1;
+    S.retry[S.lv][curIdx] = 1;
     answered = true;
     const a = (() => {
-      const qq = (cur.qa && cur.qa.length) ? cur.qa : [cur.q || []];
-      const b = qq[0] || [];
+      const b = alive[0] || [];
       return b[step] || b[0];      // 当前手数的正解点；已走完则回退到首手
     })();
     if(a){
@@ -1438,7 +1470,7 @@ document.querySelectorAll("#types .typesRow button").forEach(b=>{
       marks.innerHTML += `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="none" stroke="#c0392b" stroke-width="3"/>`;
     }
     // 本会话内再出现一次（只重排一次，避免死循环）
-    if(!timeUp && !requeued[cur._i]){ requeued[cur._i] = 1; queue.push(cur._i); }
+    if(!timeUp && !requeued[curIdx]){ requeued[curIdx] = 1; queue.push(curIdx); }
     document.getElementById("fb").textContent = "已记错（" + b.dataset.t + "），红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。";
     document.getElementById("types").classList.add("hide");
     save();
