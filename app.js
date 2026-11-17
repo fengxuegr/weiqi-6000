@@ -538,7 +538,7 @@ function targetLine(){
   }
   if(S.dailyMode === "time"){
     const targetSec = S.dailyMin * 60;
-    if(doneSec >= targetSec) return "已达标，可加练 5 分";
+    if(doneSec >= targetSec) return "已达标，可再练 " + S.dailyMin + " 分";
     const left = Math.ceil((targetSec - doneSec) / 60);
     return doneSec ? "还差 " + left + " 分" : "5–15 均可";
   }
@@ -1702,8 +1702,10 @@ document.getElementById("start").onclick = ()=>{
     sessN = snap.done || 0; ok = sessN;
     initSec = snap.sec || 0;
     if(S.dailyMode === "time"){
-      const quotaLeft = Math.max(60, S.dailyMin*60 - (S.today.sec || 0));
-      startCountdown(Math.max(60000, Math.min(snap.left || 0, quotaLeft*1000)));
+      // 上限：今天还有额度就用额度，已经做够就按设定时长（别再写死成 1 分钟/5 分钟）
+      const rest = S.dailyMin*60 - (S.today.sec || 0);
+      const capSec = rest > 0 ? rest : S.dailyMin*60;
+      startCountdown(Math.max(60000, Math.min(snap.left || 0, capSec*1000)));
     }
   } else if(S.dailyMode === "count"){
     queue = all.slice(0, S.dailyCount);
@@ -1713,7 +1715,9 @@ document.getElementById("start").onclick = ()=>{
     const targetSec = S.dailyMin * 60;
     const doneSec = (S.today.d === today() ? (S.today.sec || 0) : 0);
     let leftSec = targetSec - doneSec;
-    if(leftSec <= 0) leftSec = 300;      // 今天已经做够，仍允许再练 5 分钟
+    // 今天已经做够：按"设定时长"再给一轮，不要硬塞 5 分钟
+    // （以前写死 300，设 1 分钟的人做完一轮再开始就会被塞成 5 分钟，看着像设置被改了）
+    if(leftSec <= 0) leftSec = targetSec;
     if(leftSec < 60) leftSec = 60;       // 至少 1 分钟，免得一进来就"时间到"
     startCountdown(leftSec * 1000);
   } else {
