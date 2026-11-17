@@ -1571,7 +1571,7 @@ function tick(){
       remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
   if(remaining <= 0 && !timeUp){
     timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); clearSess(); SFX.timeup();
-    flashTimeUp();                       // 棋盘中央闪一次大字，别让孩子只从顶部小字才知道到点
+    flashBoard("时间到", "做完手上这题就收工");   // 棋盘中央闪一次大字，别让孩子只从顶部小字才知道到点
     document.getElementById("pause").classList.add("hide");
     document.getElementById("addTime").classList.remove("hide");
     document.getElementById("fb").className = "fb";
@@ -1580,12 +1580,20 @@ function tick(){
   }
 }
 
-/** 时间到：在棋盘中央闪一次大字。不挡点击、也不遮棋盘——孩子还得把手上这题做完 */
-function flashTimeUp(){
-  const m = document.getElementById("timeUpMask");
+/** 棋盘中央闪一次大字（时间到 / 本次做完共用）。
+    不挡点击、也不遮棋盘——时间到之后孩子还得把手上这题做完。
+    tone="ok" 用绿色，否则用红色。 */
+function flashBoard(main, sub, tone){
+  const m = document.getElementById("endMask");
   if(!m) return;
+  const b = document.getElementById("endMaskMain");
+  const s = document.getElementById("endMaskSub");
+  if(b) b.textContent = main;
+  if(s) s.textContent = sub || "";
   m.classList.remove("show");
+  m.classList.remove("ok");
   void m.offsetWidth;                    // 强制重排，让动画能重放（加时后再次超时用得上）
+  if(tone === "ok") m.classList.add("ok");
   m.classList.add("show");
 }
 
@@ -1593,7 +1601,7 @@ function flashTimeUp(){
 function addFiveMinutes(){
   if(!timeUp) return;
   timeUp = false; paused = false;
-  const tm = document.getElementById("timeUpMask");
+  const tm = document.getElementById("endMask");
   if(tm) tm.classList.remove("show");    // 加时了就别再挂着「时间到」
   document.getElementById("addTime").classList.add("hide");
   document.getElementById("pauseMask").classList.add("hide");
@@ -1722,8 +1730,13 @@ function nextQ(){
     // 队列做完：把本次实际做题秒数结进今日，别让秒表在「本次做完啦」页面上继续空转
     stopSecClock(); endSession();
     SFX.done(); clearSess();
+    // 务必收掉残留的错因按钮：题已经做完了，这时点「没数清气」会给已完成的题写错因、
+    // 还会把它拉进待重做队列（curIdx 仍停在最后一题）。
+    document.getElementById("types").classList.add("hide");
+    document.getElementById("nextAfterWrong").classList.add("hide");
     document.getElementById("fb").textContent = "本次做完啦，回去看进度";
     document.getElementById("fb").className="fb ok";
+    flashBoard("做完啦", "点右上「返回」看今天的进度", "ok");
     return;
   }
   resetCool();                                 // 冷却不能跨题残留
@@ -1957,6 +1970,7 @@ function onTap(e){
 document.querySelectorAll("#types .typesRow button").forEach(b=>{
   b.onclick = ()=>{
     if(paused) return;                       // 暂停时不结算错因（A-14）
+    if(answered) return;                     // 这题已做完/已看过答案，再记错因只会污染数据
     if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
     S.wrong[S.lv][curIdx] = b.dataset.t;
     // 看答案 = 这题没做出来：不计完成、不计今日、不进活跃地图，转为待重做
