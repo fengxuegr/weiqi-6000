@@ -433,12 +433,14 @@ const SFX = (function(){
   };
 })();
 
-/* 每日设置白名单：分钟数只能取 <select> 里的那几个值。
-   旧存档 / 别台设备导入的进度码可能带非法值（如 7），统一夹住，避免目标口径分裂。
+/* 每日时长：允许任意分钟数（以前只能选 <select> 里那 9 个值，孩子想练 12 分钟没法设）。
+   只做范围夹取 1–120，旧存档 / 别台设备导入的进度码可能带 7、999 这类值，统一夹住，
+   避免目标口径分裂（比如 0 分钟会让"今天够了"的判断直接成立）。
    注意：load() 在文件很靠前就会执行，这里只能用函数声明（会提升），不能用顶层 const/let。 */
 function clampMin(v){
-  const n = +v;
-  return [5,8,10,15,20,25,30,45,60].includes(n) ? n : 10;
+  if(String(v).trim() === "") return 10;      // 空输入＝没填，回默认，别当成 0
+  const n = Math.round(+v);
+  return Number.isFinite(n) ? Math.max(1, Math.min(120, n)) : 10;
 }
 function clampCount(v){
   const n = Math.round(+v);
@@ -814,13 +816,14 @@ function syncDaily(){
   document.getElementById("mFree").classList.toggle("on", S.dailyMode==="free");
   document.getElementById("mCount").classList.toggle("on", S.dailyMode==="count");
   document.getElementById("mTime").classList.toggle("on", S.dailyMode==="time");
-  const nc = document.getElementById("numCount"), sm = document.getElementById("selMin");
-  // 先夹到合法值再回填；旧版把非法值塞给 <select> 后 value 变 ""，反向读回就成了 0
+  const nc = document.getElementById("numCount"), nm = document.getElementById("numMin");
+  // 先夹到合法值再回填；旧版把非法值塞给输入框后 value 变 ""，反向读回就成了 0
   S.dailyCount = clampCount(S.dailyCount);
   S.dailyMin = clampMin(S.dailyMin);
   nc.value = S.dailyCount;
-  sm.value = String(S.dailyMin);
-  document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", +c.dataset.n === S.dailyCount));
+  if(nm) nm.value = S.dailyMin;
+  document.querySelectorAll("#rowCount .chip").forEach(c => c.classList.toggle("on", +c.dataset.n === S.dailyCount));
+  document.querySelectorAll("#rowTime .chip").forEach(c => c.classList.toggle("on", +c.dataset.min === S.dailyMin));
 }
 document.getElementById("mFree").onclick = ()=>{ S.dailyMode="free"; save(); renderHome(); };
 document.getElementById("mCount").onclick = ()=>{ S.dailyMode="count"; save(); renderHome(); };
@@ -828,10 +831,18 @@ document.getElementById("mTime").onclick = ()=>{ S.dailyMode="time"; save(); ren
 document.getElementById("numCount").onchange = (e)=>{
   S.dailyCount = clampCount(e.target.value); save(); renderHome();
 };
-document.querySelectorAll(".chip").forEach(c=>{
+document.querySelectorAll("#rowCount .chip").forEach(c=>{
   c.onclick = ()=>{ S.dailyCount = clampCount(c.dataset.n); save(); renderHome(); };
 });
-document.getElementById("selMin").onchange = (e)=>{ S.dailyMin = clampMin(e.target.value); save(); renderHome(); };
+document.getElementById("numMin").onchange = (e)=>{
+  const v = e.target.value;
+  // 清空输入框时不改成 1 分钟（一删就跳值很难受），保留原值并回填
+  S.dailyMin = String(v).trim() === "" ? S.dailyMin : clampMin(v);
+  save(); renderHome();
+};
+document.querySelectorAll("#rowTime .chip").forEach(c=>{
+  c.onclick = ()=>{ S.dailyMin = clampMin(c.dataset.min); save(); renderHome(); };
+});
 document.getElementById("autoBtn").onclick = ()=>{
   S.autoNext = (S.autoNext === false);   // 取反
   save(); renderHome();
