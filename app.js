@@ -1464,6 +1464,8 @@ document.getElementById("oops").onclick = ()=>{
   if(preWrong){
     bad = preWrong.bad;
     qRec(S.lv, curIdx)[1] = preWrong.wrongCount;
+    wrongThisQ = Math.max(0, wrongThisQ - 1);   // 既然是手滑，这次不算"试错"
+    resetCool();                                // 手滑是误触，不该还锁着棋盘
     document.getElementById("iw").textContent = bad;
     save();
     preWrong = null;
@@ -1484,7 +1486,9 @@ let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
 let sessSec = 0, secTick = null, paused = false;   // 本次实际做题秒数（整数秒，暂停时不计）
 let sessLast = 0, secCarry = 0, hiddenPause = false; // 时间戳基准 / 不足1秒零头 / 是否因切后台自动暂停
 let autoTimer = null;                              // 答对后自动进下一题的定时器
+let lockUntil = 0, coolTimer = null;               // 答错后的棋盘冷却：期间点击直接忽略，把「错了就立刻换点再试」的反射打断
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
+let wrongThisQ = 0;   // 本题这一遍错了几次（进下一题归零）。错到 3 次才做对，基本是试出来的，要收进错题集
 let customMode = false;                            // 当前是不是错题重练（快照要打标记，别被正常练习恢复）
 let lastCapCount = 0;                              // 最后一手吃了几子（吃子那手多留时间看清棋形）
 
@@ -1710,6 +1714,8 @@ function nextQ(){
     document.getElementById("fb").className="fb ok";
     return;
   }
+  resetCool();                                 // 冷却不能跨题残留
+  wrongThisQ = 0;
   cur = DATA[S.lv].p[idx]; curIdx = idx; answered = false; step = 0; placed = [];
   // 候选线路跨手保持：原题库用 (20,20) 分隔的是同一棵解答树上的分支，
   // 分叉点几乎都在黑手，白棋应手在分叉前一致；不能每手重新去 qa 里取第一个命中项
@@ -1823,6 +1829,14 @@ function solved(capText){
   const r = qRec(S.lv, curIdx);
   r[3] = today();
   if(S.retry[S.lv]) delete S.retry[S.lv][curIdx];
+  // 错 3 次以上才做对＝基本是试出来的，做对也收进错题集、稍后重练一遍。
+  // 不覆盖已有的具体错因（原来选过"气数"就还是"气数"），只补"试错 N 次"。
+  if(wrongThisQ >= 3){
+    if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
+    if(!S.wrong[S.lv][curIdx]) S.wrong[S.lv][curIdx] = "试错 " + wrongThisQ + " 次";
+    if(!S.retry[S.lv]) S.retry[S.lv] = {};
+    S.retry[S.lv][curIdx] = 1;
+  }
   markDone();
   document.getElementById("ir").textContent = ok;
   if(timeUp){
@@ -1852,9 +1866,31 @@ function branchStep(lines, step, r, c){
   return {alive, hit:true, white, step:s,
           done: alive.some(b => s >= b.length)};
 }
+/* 答错后让棋盘安静一会儿。
+   一题的可点范围通常只有十几二十个交叉点，"点错→立刻换一个点再点"几十秒就能穷举出正解，
+   短暂冷却把这条反射打断，让孩子先想一下再动手。
+   冷却期内的点击直接丢弃：不计错，也不会延长冷却（免得越点越久像惩罚）。 */
+function coolDown(ms){
+  lockUntil = Date.now() + ms;
+  const svg = document.getElementById("svg");
+  if(svg) svg.classList.add("cool");
+  clearTimeout(coolTimer);
+  coolTimer = setTimeout(function(){
+    const s = document.getElementById("svg");
+    if(s) s.classList.remove("cool");
+    lockUntil = 0;
+  }, ms);
+}
+/** 进下一题/重开一局时把冷却彻底清掉，别让上一题的错误把新题也锁住 */
+function resetCool(){
+  clearTimeout(coolTimer); coolTimer = null; lockUntil = 0;
+  const svg = document.getElementById("svg");
+  if(svg) svg.classList.remove("cool");
+}
 function onTap(e){
   if(paused) return;                                                    // 已暂停，棋盘不响应
   if(answered) { clearTimeout(autoTimer); autoTimer = null; nextQ(); return; }
+  if(Date.now() < lockUntil) return;                                    // 答错冷却中：忽略，不计错也不延长
   const el = e.currentTarget, rect = el.getBoundingClientRect(), vb = el.viewBox.baseVal;
   const px = (e.clientX - rect.left) / rect.width * vb.width;
   const py = (e.clientY - rect.top) / rect.height * vb.height;
@@ -1893,6 +1929,7 @@ function onTap(e){
     preWrong = {bad: bad, wrongCount: rec[1]};   // 供「手滑」回滚
     bad++;
     rec[1]++;
+    wrongThisQ++;
     save();
     SFX.wrong();                                 // 一声轻闷提示：确认"这一手没走对"
     document.getElementById("iw").textContent = bad;
@@ -1902,6 +1939,7 @@ function onTap(e){
     document.getElementById("fb").className = "fb no";
     document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以选下面错因看正解，但这题不算完成）";
     document.getElementById("types").classList.remove("hide");
+    coolDown(1200);                              // 先停一下：别让孩子点了错就换一个点接着试
   }
 }
 document.querySelectorAll("#types .typesRow button").forEach(b=>{

@@ -153,6 +153,8 @@ h1{font-size:var(--fs-h1);line-height:1.3;margin:8px 0 4px;letter-spacing:-.01em
 .wd{background:var(--board-frame);padding:10px;border-radius:var(--r-sm);max-width:560px;
     margin:0 auto;position:relative}
 svg{width:100%;height:auto;display:block;touch-action:manipulation}
+/* 答错后的冷却：棋盘轻微变淡，示意"现在别急着点"，1.2 秒后自动恢复 */
+#svg.cool{opacity:.72;transition:opacity .12s linear}
 
 .info{display:flex;gap:8px;margin-top:10px}
 .info div{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);
