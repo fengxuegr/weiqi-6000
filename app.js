@@ -463,11 +463,17 @@ function load(){
       o.dailyMode = o.dailyMode || "time";
       o.dailyCount = clampCount(o.dailyCount);
       o.dailyMin = clampMin(o.dailyMin);
-      o.history = o.history || {};
+      // lv 必须夹住：题库改版后老存档可能指向已经不存在的档位，
+      // 越界时 DATA[S.lv] 是 undefined，一进做题页就 TypeError。
+      o.lv = Math.max(0, Math.min(DATA.length - 1, Math.round(+o.lv) || 0));
+      o.history = (o.history && typeof o.history === "object" && !Array.isArray(o.history)) ? o.history : {};
       // 每题首答记录 [首答对错, 累计错点, 首手耗时ms, 最近做对日期]；旧格式/损坏值直接丢掉
       o.q = (o.q && typeof o.q === "object" && !Array.isArray(o.q)) ? o.q : {};
-      o.retry = o.retry || {};  // 待重做（点了错因看答案的题）
-      o.sfx = o.sfx || {on:true, vol:0.45};
+      o.st = (o.st && typeof o.st === "object" && !Array.isArray(o.st)) ? o.st : {};
+      o.wrong = (o.wrong && typeof o.wrong === "object" && !Array.isArray(o.wrong)) ? o.wrong : {};
+      o.retry = (o.retry && typeof o.retry === "object" && !Array.isArray(o.retry)) ? o.retry : {};  // 待重做（点了错因看答案的题）
+      o.today = (o.today && typeof o.today === "object") ? o.today : {d:"", n:0, sec:0};
+      o.sfx = (o.sfx && typeof o.sfx === "object") ? o.sfx : {on:true, vol:0.45};
       if(o.autoNext === undefined) o.autoNext = true;
       return o;
     }
