@@ -150,6 +150,9 @@ h1{font-size:var(--fs-h1);line-height:1.3;margin:8px 0 4px;letter-spacing:-.01em
 /* ---------- 做题页 ---------- */
 .top{display:flex;justify-content:space-between;align-items:center;gap:8px;
      font-size:var(--fs-sm);color:var(--ink-2);margin-bottom:8px}
+/* 返回按钮放大后顶部会挤：题头允许收缩（#phead 的省略号规则在下面做题页一节），
+   时钟和按钮永远不被压缩 */
+.top #clock,.top .btn{flex:none;white-space:nowrap}
 .wd{background:var(--board-frame);padding:10px;border-radius:var(--r-sm);max-width:560px;
     margin:0 auto;position:relative}
 svg{width:100%;height:auto;display:block;touch-action:manipulation}
@@ -366,14 +369,14 @@ input[type=range]{width:96px;accent-color:var(--brand);vertical-align:middle;hei
   box-shadow:inset 0 0 0 2px var(--line-2)}
 .pauseMask b{font-size:19px}
 .pauseMask span{font-size:var(--fs-xs);color:var(--ink-4)}
-/* 结束提示（时间到 / 本次做完）：在棋盘中央闪一次大字。
-   关键：pointer-events:none —— 时间到之后孩子还得把手上这题做完，不能挡住点击；
-   也刻意不做全屏遮罩，棋子和题目必须照常看得清。3.4 秒后自己淡出，不长期占画面。 */
+/* 结束提示（时间到 / 本次做完）：棋盘中央的大字。
+   刻意不做全屏遮罩——棋子和题目要照常看得清；pointer-events:none 也不吃点击。
+   不自动淡出：结束是持续状态，一直显示到孩子点「返回」或「再来 5 分钟」。 */
 .endMask{
   position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:8px;z-index:4;pointer-events:none;
   opacity:0;visibility:hidden}
-.endMask.show{visibility:visible;animation:endFlash 3.4s ease forwards}
+.endMask.show{visibility:visible;opacity:1;animation:endIn .26s ease}
 .endMask b{
   font-size:clamp(32px,8.5vw,48px);font-weight:800;letter-spacing:.08em;line-height:1.1;
   color:var(--no);background:rgba(255,252,246,.95);
@@ -384,11 +387,9 @@ input[type=range]{width:96px;accent-color:var(--brand);vertical-align:middle;hei
   font-size:var(--fs-sm);color:var(--ink-2);
   background:rgba(255,252,246,.94);padding:5px 12px;border-radius:999px;
   box-shadow:0 2px 8px rgba(80,50,25,.14)}
-@keyframes endFlash{
-  0%{opacity:0;transform:scale(.82)}
-  10%{opacity:1;transform:scale(1)}
-  72%{opacity:1;transform:scale(1)}
-  100%{opacity:0;transform:scale(1.04)}
+@keyframes endIn{
+  from{opacity:0;transform:scale(.86)}
+  to{opacity:1;transform:scale(1)}
 }
 @media (max-width:400px){
   .top{gap:6px}

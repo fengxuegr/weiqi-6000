@@ -137,6 +137,23 @@ const SFX = (function(){
   function ready(){ return on() && vol() > 0.001; }
   function rnd(a, b){ return a + Math.random() * (b - a); }
 
+  /* 延时音效（提子的第二声、答对的两声…）必须能被统一取消：
+     孩子答对后立刻点返回，否则 240ms 后还会冒出一声"叮"，听着像没退出去 */
+  const timers = [];
+  function later(fn, ms){
+    const id = setTimeout(function(){
+      const i = timers.indexOf(id);
+      if(i >= 0) timers.splice(i, 1);
+      fn();
+    }, ms);
+    timers.push(id);
+    return id;
+  }
+  function cancelAll(){
+    for(let i = 0; i < timers.length; i++) clearTimeout(timers[i]);
+    timers.length = 0;
+  }
+
   /** 叠加一个阻尼模态 A·e^(-t/τ)·sin(2πft+φ)。相位用递推算，比每次 sin 快一个量级 */
   function addMode(out, sr, f, tau, amp, phase){
     if(!(amp > 0) || !(f > 0) || !(f < sr * 0.45)) return;
@@ -244,7 +261,7 @@ const SFX = (function(){
     return toBuffer(out, sr);
   }
 
-  function playBuf(buf, gain, pan, rate){
+  function playBuf(buf, gain, pan, rate, when){
     const c = ctx(); if(!c || !buf) return;
     const src = c.createBufferSource();
     src.buffer = buf;
@@ -254,16 +271,16 @@ const SFX = (function(){
     src.connect(g);
     if(pan && c.createStereoPanner){
       const p = c.createStereoPanner();
-      p.pan.value = pan;
+      if(p.pan) p.pan.value = pan;
       g.connect(p); p.connect(c.destination);
     } else {
       g.connect(c.destination);
     }
-    src.start();
+    src.start(when || 0);        // 传绝对时间就用音频时钟排期，比 setTimeout 准，也不怕后台节流
   }
 
   /** 播放一组敲击：随机变体 + 随机音量/速率，消掉机械感 */
-  function hit(kind, pan){
+  function hit(kind, pan, when){
     if(!ready()) return;
     let arr = bank[kind];
     if(!arr){
@@ -273,7 +290,7 @@ const SFX = (function(){
     }
     if(!arr.length) return;
     const buf = arr[(Math.random() * arr.length) | 0];
-    playBuf(buf, SPEC[kind].level * rnd(0.93, 1.07), pan || 0, rnd(0.985, 1.015));
+    playBuf(buf, SPEC[kind].level * rnd(0.93, 1.07), pan || 0, rnd(0.985, 1.015), when);
   }
 
   function bell(f, gain, pan){
@@ -353,7 +370,7 @@ const SFX = (function(){
   }
 
   /** 随机取一个变体，且不连续复用同一个（Sabaki 也是这么做的，否则能听出重复） */
-  function playRec(kind, gain, pan, rate){
+  function playRec(kind, gain, pan, rate, when){
     if(recState !== 2 || !recBank) return false;
     const arr = recBank[kind];
     if(!arr || !arr.length) return false;
@@ -366,7 +383,7 @@ const SFX = (function(){
       if(kind === "stone") lastStone = idx; else lastCap = idx;
     }
     if(!arr[idx]) return false;
-    playBuf(arr[idx], gain, pan, rate);
+    playBuf(arr[idx], gain, pan, rate, when);
     return true;
   }
 
@@ -383,12 +400,13 @@ const SFX = (function(){
       if(!ready()) return;
       if(!playRec("stone", 0.38, 0.12, rnd(1.03, 1.06))) hit("white", 0.12);
     },
-    // 提子：落子后 70ms 再响，录音更长更闷，像棋子被拿起来磕在盘面上
+    // 提子：用音频时钟排在落子后 70ms（不用 setTimeout：后台标签页的定时器会被节流，
+    // 声音会拖着不出来；音频时钟是准的，而且这个延迟太短，不值得为它做取消）
     capture(){
-      setTimeout(function(){
-        if(!ready()) return;
-        if(!playRec("capture", 0.42, -0.06, rnd(0.985, 1.015))) hit("capture", -0.06);
-      }, 70);
+      if(!ready()) return;
+      const c = ctx(); if(!c) return;
+      const when = c.currentTime + 0.07;
+      if(!playRec("capture", 0.42, -0.06, rnd(0.985, 1.015), when)) hit("capture", -0.06, when);
     },
     // 答错：一声轻闷的木质提示，告诉孩子"这一手没走对"，但不刺耳、不掉音阶
     wrong(){
@@ -399,18 +417,19 @@ const SFX = (function(){
       hit("wrong", 0);
     },
     ok(){                                  // 答对：纯四度上行，很轻
-      setTimeout(function(){ bell(988, 0.13); }, 130);
-      setTimeout(function(){ bell(1318, 0.10); }, 240);
+      later(function(){ bell(988, 0.13); }, 130);
+      later(function(){ bell(1318, 0.10); }, 240);
     },
     done(){                                // 本次做完：G-B-D 大三和弦琶音
       [784, 988, 1174].forEach(function(f, i){
-        setTimeout(function(){ bell(f, 0.15 - i * 0.02); }, i * 110);
+        later(function(){ bell(f, 0.15 - i * 0.02); }, i * 110);
       });
     },
     timeup(){                              // 时间到：纯五度下行
       bell(700, 0.16);
-      setTimeout(function(){ bell(466, 0.14); }, 190);
-    }
+      later(function(){ bell(466, 0.14); }, 190);
+    },
+    cancel(){ cancelAll(); }               // 离开做题页时掐掉还没响的延时音效
   };
 })();
 
@@ -1568,14 +1587,14 @@ function tick(){
   lastTick = now;
   const m = Math.floor(remaining/60000), s = Math.floor(remaining%60000/1000);
   document.getElementById("clock").textContent =
-      remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
+      remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "0:00";
   if(remaining <= 0 && !timeUp){
     timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); clearSess(); SFX.timeup();
-    flashBoard("时间到", "做完手上这题就收工");   // 棋盘中央闪一次大字，别让孩子只从顶部小字才知道到点
+    flashBoard("时间到", "点返回看进度 · 或再来 5 分钟");
     document.getElementById("pause").classList.add("hide");
     document.getElementById("addTime").classList.remove("hide");
     document.getElementById("fb").className = "fb";
-    document.getElementById("fb").textContent = "时间到，今天到这儿，做完手上这题就收工" +
+    document.getElementById("fb").textContent = "时间到，这轮就到这儿" +
         ((S.today.sec || 0) >= S.dailyMin*60 ? "（今天的 " + S.dailyMin + " 分钟够了）" : "");
   }
 }
@@ -1597,12 +1616,17 @@ function flashBoard(main, sub, tone){
   m.classList.add("show");
 }
 
+/** 收掉棋盘中央的结束大字（重新开题 / 加时 / 返回首页时用） */
+function hideEndMask(){
+  const m = document.getElementById("endMask");
+  if(m) m.classList.remove("show");
+}
+
 /** 时间到之后加时：再给 5 分钟，不占每日额度，队列按剩余未做题重建 */
 function addFiveMinutes(){
   if(!timeUp) return;
   timeUp = false; paused = false;
-  const tm = document.getElementById("endMask");
-  if(tm) tm.classList.remove("show");    // 加时了就别再挂着「时间到」
+  hideEndMask();                         // 加时了就别再挂着「时间到」
   document.getElementById("addTime").classList.add("hide");
   document.getElementById("pauseMask").classList.add("hide");
   document.getElementById("pause").classList.remove("hide");
@@ -1698,8 +1722,21 @@ document.getElementById("start").onclick = ()=>{
 document.getElementById("quit").onclick = ()=>{
   clearTimeout(autoTimer); autoTimer = null;
   stopTimer(); stopSecClock(); endSession(); clearSess();
+  SFX.cancel();                     // 掐掉还没响的延时音效，退出后不该再冒出"叮"
+  // 返回首页＝这次做题结束，把所有"做题态"收干净。
+  // 光藏起 #play 不够：暂停态、时间到态、冷却定时器、禁用的错因区都会留到下一局，
+  // 尤其 setTypesDisabled(true) 之后只有「继续」会解禁，走返回就会让错因按钮一直点不动。
+  paused = false; hiddenPause = false; timeUp = false;
+  wrongThisQ = 0;
+  resetCool();
+  setTypesDisabled(false);
+  document.getElementById("types").classList.add("hide");
+  document.getElementById("nextAfterWrong").classList.add("hide");
+  document.getElementById("pauseMask").classList.add("hide");
+  hideEndMask();
   document.getElementById("clock").textContent = "";
   document.getElementById("addTime").classList.add("hide");
+  document.getElementById("pause").textContent = "暂停";
   document.getElementById("play").classList.add("hide");
   document.getElementById("home").classList.remove("hide");
   renderHome();
@@ -1740,6 +1777,7 @@ function nextQ(){
     return;
   }
   resetCool();                                 // 冷却不能跨题残留
+  hideEndMask();                               // 有新题了，把上一轮的「时间到 / 做完啦」收掉
   wrongThisQ = 0;
   cur = DATA[S.lv].p[idx]; curIdx = idx; answered = false; step = 0; placed = [];
   // 候选线路跨手保持：原题库用 (20,20) 分隔的是同一棵解答树上的分支，
@@ -1752,6 +1790,7 @@ function nextQ(){
   document.getElementById("fb").textContent = cur.t || "请落子";
   document.getElementById("fb").className = "fb";
   document.getElementById("types").classList.add("hide");
+  setTypesDisabled(false);                     // 新题开放错因区（上一局若停在暂停态可能还锁着）
   draw();
   saveSess();
 }
@@ -1914,6 +1953,7 @@ function resetCool(){
 }
 function onTap(e){
   if(paused) return;                                                    // 已暂停，棋盘不响应
+  if(timeUp) return;                                                    // 时间到就是结束了：只能「返回」或「再来 5 分钟」
   if(answered) { clearTimeout(autoTimer); autoTimer = null; nextQ(); return; }
   if(Date.now() < lockUntil) return;                                    // 答错冷却中：忽略，不计错也不延长
   const el = e.currentTarget, rect = el.getBoundingClientRect(), vb = el.viewBox.baseVal;
