@@ -1571,6 +1571,7 @@ function tick(){
       remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "时间到";
   if(remaining <= 0 && !timeUp){
     timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); clearSess(); SFX.timeup();
+    flashTimeUp();                       // 棋盘中央闪一次大字，别让孩子只从顶部小字才知道到点
     document.getElementById("pause").classList.add("hide");
     document.getElementById("addTime").classList.remove("hide");
     document.getElementById("fb").className = "fb";
@@ -1579,10 +1580,21 @@ function tick(){
   }
 }
 
+/** 时间到：在棋盘中央闪一次大字。不挡点击、也不遮棋盘——孩子还得把手上这题做完 */
+function flashTimeUp(){
+  const m = document.getElementById("timeUpMask");
+  if(!m) return;
+  m.classList.remove("show");
+  void m.offsetWidth;                    // 强制重排，让动画能重放（加时后再次超时用得上）
+  m.classList.add("show");
+}
+
 /** 时间到之后加时：再给 5 分钟，不占每日额度，队列按剩余未做题重建 */
 function addFiveMinutes(){
   if(!timeUp) return;
   timeUp = false; paused = false;
+  const tm = document.getElementById("timeUpMask");
+  if(tm) tm.classList.remove("show");    // 加时了就别再挂着「时间到」
   document.getElementById("addTime").classList.add("hide");
   document.getElementById("pauseMask").classList.add("hide");
   document.getElementById("pause").classList.remove("hide");
