@@ -1586,6 +1586,10 @@ function resumeSec(){
 /** 把「这次做到哪儿了」存下来。只在题与题之间存，恢复时当前题从头开始。 */
 function saveSess(){
   if(!cur) return;
+  // 时间到＝这轮已经结束，别再存"还剩 0 秒"的快照。
+  // 否则切后台/锁屏会把它写回来，下次打开就是「接着上次 · 1 分钟」——
+  // 那 1 分钟是恢复路径的下限兜底，看着像"设置被改成了 1 分钟"。
+  if(timeUp) return;
   S.sess = { day: today(), at: Date.now(), lv: S.lv, pass: lvSt(S.lv).pass, mode: S.dailyMode,
              left: remaining, queue: queue.slice(), cur: curIdx,
              done: sessN, sec: sessSec, custom: customMode };
