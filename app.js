@@ -1057,9 +1057,9 @@ async function decodeCode(code){
 function showQr(code){
   const box = document.getElementById("qrBox");
   const tip = document.getElementById("qrHint");
-  if(!box) return;
+  if(!box) return "no-box";
   const hideAll = ()=>{ box.classList.add("hide"); if(tip) tip.classList.add("hide"); };
-  if(typeof qrcode !== "function"){ hideAll(); return; }
+  if(typeof qrcode !== "function"){ hideAll(); return "no-lib"; }
   const safe = code.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const web = !location.protocol || /^https?:$/.test(location.protocol);
   const content = web ? (location.origin + location.pathname + "#p=" + safe) : code;
@@ -1075,7 +1075,8 @@ function showQr(code){
         : "这是进度码本身 · 用另一台设备的网页版点「扫码导入」对准它";
       tip.classList.remove("hide");
     }
-  }catch(e){ hideAll(); }
+    return "ok";
+  }catch(e){ hideAll(); return "fail:" + ((e && e.message) || e); }
 }
 
 /** 扫码打开本页时，hash 里带着另一台的进度码 → 问一句再导入 */
@@ -1227,17 +1228,22 @@ async function importFromCode(code){
   const msg = "来自「" + (src || "另一台设备") + "」：" + lb + " · 第 " + pass + " 轮。\n" +
               localLine + "。\n" + where + "。\n" + tail;
   if(!confirm(msg)) return false;
-  importUndo = JSON.stringify(S); importUndoPid = PID;   // 单次内存态快照，不落盘
+  /* 撤销快照必须在「切到目标档案之后」再取：
+   * 要恢复的是被覆盖的那一档的进度，不是发起导入那一档的。
+   * 顺手记下被改名那一档的原名，撤销时一并还原（名字存在 profiles 里，不在 S 里）。 */
+  importUndo = null; importUndoPid = null; importUndoName = "";
   if(targetId !== PID) switchProfile(targetId);
+  importUndo = JSON.stringify(S); importUndoPid = PID;   // 单次内存态快照，不落盘
+  importUndoName = renameTo ? pname(PID) : "";
   if(renameTo) renameProfile(PID, renameTo);
   applyPortable(o); renderHome();
   showUndoImport();
   return "「" + pname(PID) + "」 · " + lb + " · 第 " + pass + " 轮";
 }
 /* 撤销导入：仅当前页面有效；开始做题或切换档案即失效（D-02） */
-let importUndo = null, importUndoPid = null;
+let importUndo = null, importUndoPid = null, importUndoName = "";
 function clearUndoImport(){
-  importUndo = null; importUndoPid = null;
+  importUndo = null; importUndoPid = null; importUndoName = "";
   const bar = document.getElementById("undoBar");
   if(bar) bar.classList.add("hide");
 }
@@ -1248,7 +1254,10 @@ function showUndoImport(){
 document.getElementById("undoImport").onclick = ()=>{
   if(!importUndo) return;
   if(importUndoPid !== PID){ clearUndoImport(); alert("档案已切换，无法撤销这次导入"); return; }
-  S = JSON.parse(importUndo); clearUndoImport(); save(); renderHome();
+  const backName = importUndoName;
+  S = JSON.parse(importUndo); clearUndoImport(); save();
+  if(backName && pname(PID) !== backName) renameProfile(PID, backName);   // 导入时被改名的一并还原
+  renderHome();
   alert("已撤销导入，进度恢复到导入前");
 };
 
@@ -1258,16 +1267,33 @@ document.getElementById("mkCode").onclick = async ()=>{
     const code = await encodeCode(makePortable(
       document.getElementById("withWrong").checked,
       document.getElementById("withMap").checked));
-    showQr(code);
-    hint.textContent = "已生成「" + pname(PID) + "」的进度二维码（" + code.length +
-                       " 个字符）——用另一台设备点「扫码导入」对准它";
+    const r = showQr(code);
+    if(r === "ok"){
+      hint.textContent = "已生成「" + pname(PID) + "」的进度二维码（" + code.length +
+                         " 个字符）——用另一台设备点「扫码导入」对准它";
+    }else if(r === "no-lib"){
+      hint.textContent = "进度码已经算好了，但画二维码的组件没加载出来（多半是断网时打开的）。" +
+                         "办法：刷新页面再点一次。";
+    }else if(r === "no-box"){
+      hint.textContent = "找不到二维码显示区，页面可能没加载完整，刷新一下再试。";
+    }else{
+      const why = String(r).replace(/^fail:/, "");
+      const full = /overflow|too (long|big)|length/i.test(why);
+      hint.textContent = full
+        ? "这张码太大了，画不下（取消勾选「错题记录」「活跃地图」会短很多，再点一次）"
+        : "二维码生成失败：" + why + "。刷新页面再试一次。";
+    }
   }catch(e){ hint.textContent = "生成失败：" + (e.message || e); }
 };
 
 /* ---------- 扫码导入（设备自带摄像头 + jsQR 解码） ---------- */
-let scanStream = null, scanRAF = 0;
-/** 彻底关闭取景框（成功导入或用户取消时用） */
+let scanStream = null, scanRAF = 0, scanSession = 0;
+/** 彻底关闭取景框（成功导入或用户取消时用）。
+ *  同时把 scanSession 加一，作废「还没返回」的 getUserMedia ——
+ *  否则在等相机授权时点取消，相机仍会晚一步打开、灯一直亮着，
+ *  藏起来的扫描循环还可能突然弹一句「已导入」。 */
 function stopScan(){
+  scanSession++;
   releaseCamera();
   const v = document.getElementById("scanVideo");
   if(v) v.style.display = "";
@@ -1303,6 +1329,7 @@ function pickCode(text){
   return mm[1] + body;
 }
 function scanLoop(){
+  const sess = scanSession;
   const v = document.getElementById("scanVideo");
   const cv = document.getElementById("scanCanvas");
   if(!scanStream || !v || !cv) return;
@@ -1323,6 +1350,7 @@ function scanLoop(){
       return;
     }
   }
+  if(sess !== scanSession) return;   // 这一轮已被取消/被新一轮取代，不再续帧
   scanRAF = requestAnimationFrame(scanLoop);
 }
 /** 是否以"独立窗口/桌面图标"方式运行（此时没有地址栏，权限要按 App 去给） */
@@ -1392,6 +1420,7 @@ document.getElementById("scanCode").onclick = async ()=>{
     hint.textContent = "这个浏览器不提供摄像头接口，换 Chrome 打开试试" + diag;
     return;
   }
+  const mySess = ++scanSession;      // 本次扫码的会话号：取消或重开都会让它失效
   document.getElementById("qrBox").classList.add("hide");
   document.getElementById("qrHint").classList.add("hide");
   document.getElementById("scanWrap").classList.remove("hide");
@@ -1412,11 +1441,17 @@ document.getElementById("scanCode").onclick = async ()=>{
   }
 
   try{
-    scanStream = await openCamera();
+    const st = await openCamera();
+    // 等授权 / 等相机启动的这几秒里，用户可能已经点了取消（scanSession 变了）。
+    // 这时必须立刻把这条流关掉，不能挂到界面上，否则相机灯一直亮。
+    if(mySess !== scanSession){ try{ st.getTracks().forEach(t=>{ t.stop(); }); }catch(e){} return; }
+    scanStream = st;
     const v = document.getElementById("scanVideo");
     v.srcObject = scanStream;
     await waitVideoReady(v);
+    if(mySess !== scanSession){ releaseCamera(); return; }
     try{ await v.play(); }catch(e){ /* 有些安卓机 play() 会先报错，只要出画面就能解 */ }
+    if(mySess !== scanSession){ releaseCamera(); return; }
     if(!v.videoWidth){
       scanFail("摄像头已打开，但拿不到画面（可能被其它 App 占用）" + diag);
       return;
@@ -1424,6 +1459,7 @@ document.getElementById("scanCode").onclick = async ()=>{
     hint.textContent = "对准另一台设备上的二维码";
     scanLoop();
   }catch(e){
+    if(mySess !== scanSession) return;   // 已取消：别再弹一堆错误提示盖掉「已取消扫码」
     const name = (e && e.name) || "";
     let msg;
     if(name === "NotAllowedError" || name === "PermissionDeniedError")
