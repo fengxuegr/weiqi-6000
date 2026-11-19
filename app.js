@@ -1701,7 +1701,11 @@ function resumeSession(){
 document.getElementById("start").onclick = ()=>{
   SFX.unlock();
   const st = lvSt(S.lv);
-  const all = planList(S.lv).filter(k => !st.done[k]);
+  // 待重做的题即使已经"做对过"也要排进来：
+  // 「错 3 次才做对」的题同时有 done=1 和 retry=1，只按 done 过滤会把它一起剔掉，
+  // 结果 planList 插好的队首白插了。
+  const rtNow = S.retry[S.lv] || {};
+  const all = planList(S.lv).filter(k => !st.done[k] || rtNow[k]);
   const snap = validSess();
 
   customMode = false;
