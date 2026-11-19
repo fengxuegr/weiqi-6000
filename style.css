@@ -472,3 +472,24 @@ input[type=range]{width:96px;accent-color:var(--brand);vertical-align:middle;hei
   .inline{justify-content:flex-start}
   select,input[type=number]{max-width:100%}
 }
+
+/* ---------- 首页「怎么用」折叠块（内嵌说明书简版） ---------- */
+.hw-body{padding-top:8px}
+.hw-steps{margin:0 0 12px;padding-left:17px}
+.hw-steps li{font-size:var(--fs-sm);color:var(--ink-2);line-height:1.6;margin:0 0 9px;padding-left:1px}
+.hw-steps li:last-child{margin-bottom:0}
+.hw-steps li b{display:block;font-weight:700;color:var(--ink-1);margin-bottom:1px}
+.hw-ladder{background:var(--surface-2);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:10px 10px 8px;margin:10px 0 0}
+.hw-t{font-size:var(--fs-xs);color:var(--ink-3);line-height:1.5;margin-bottom:7px}
+.hw-cells{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.hw-cells span{text-align:center;font-size:var(--fs-xs);font-weight:700;color:var(--ink-2);
+  background:var(--surface);border:1px solid var(--line);border-radius:4px;
+  padding:4px 0;font-variant-numeric:tabular-nums}
+.hw-cells span.last{background:var(--brand);border-color:var(--brand);color:var(--surface)}
+.hw-warn{margin:10px 0 0;padding-left:16px}
+.hw-warn li{font-size:var(--fs-xs);color:var(--ink-4);line-height:1.6;margin:0 0 5px}
+.hw-warn li:last-child{margin-bottom:0}
+@media (max-width:360px){
+  .hw-cells{grid-template-columns:repeat(5,1fr)}
+}
