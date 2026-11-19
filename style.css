@@ -195,6 +195,11 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
               font-weight:600;min-height:48px;cursor:pointer}
 .typesOops{width:100%;margin-top:8px;border:1px dashed var(--line-2);background:var(--surface-2);border-radius:var(--r-sm);
            padding:10px;font-size:12.5px;font-family:inherit;color:var(--oops-ink);cursor:pointer}
+/* 「就是想看答案」：只在答错后出现（放在错因区里），所以做成整行宽，不必做得歪歪扭扭 */
+.typesReveal{width:100%;margin-top:8px;border:1px solid var(--line-2);background:var(--surface);
+             border-radius:var(--r-sm);padding:11px 10px;min-height:44px;
+             font-size:12.5px;font-family:inherit;color:var(--ink-2);cursor:pointer}
+.typesReveal:active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-strong)}
 .types button:active{background:var(--brand-soft);border-color:var(--brand)}
 
 .hide{display:none!important}

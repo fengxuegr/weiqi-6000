@@ -1528,7 +1528,6 @@ document.getElementById("qrFile").onchange = async (e)=>{
 document.getElementById("oops").onclick = ()=>{
   if(paused) return;
   document.getElementById("types").classList.add("hide");
-  document.getElementById("revealRow").classList.remove("hide");   // 撤销错判，「看答案」也该回来
   const marks = document.getElementById("marks");
   if(marks) marks.innerHTML = "";
   const fb = document.getElementById("fb");
@@ -1647,7 +1646,6 @@ function tick(){
     flashBoard("时间到", "点返回看进度 · 或再来 5 分钟");
     document.getElementById("pause").classList.add("hide");
     document.getElementById("addTime").classList.remove("hide");
-    document.getElementById("revealRow").classList.add("hide");   // 时间到就不给看答案了
     document.getElementById("fb").className = "fb";
     document.getElementById("fb").textContent = "时间到，这轮就到这儿" +
         ((S.today.sec || 0) >= S.dailyMin*60 ? "（今天的 " + S.dailyMin + " 分钟够了）" : "");
@@ -1855,7 +1853,6 @@ function nextQ(){
   document.getElementById("fb").className = "fb";
   document.getElementById("types").classList.add("hide");
   setTypesDisabled(false);                     // 新题开放错因区（上一局若停在暂停态可能还锁着）
-  document.getElementById("revealRow").classList.remove("hide");   // 新题重新给「看答案」入口
   draw();
   saveSess();
 }
@@ -2067,9 +2064,8 @@ function onTap(e){
     const x = ox + c*cell, y = oy + r*cell;
     marks.innerHTML = `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="#1a1a1a" opacity=".5"/>`;
     document.getElementById("fb").className = "fb no";
-    document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以选下面错因看正解，但这题不算完成）";
+    document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以选错因、或直接看答案，但这题不算完成）";
     document.getElementById("types").classList.remove("hide");
-    document.getElementById("revealRow").classList.add("hide");   // 错因区已接管「看正解」，别两处并排
     coolDown(1200);                              // 先停一下：别让孩子点了错就换一个点接着试
   }
 }
@@ -2100,7 +2096,6 @@ function revealAnswer(reason){
       ? ("已记错（" + reason + "），红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。")
       : "红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。";
   document.getElementById("types").classList.add("hide");
-  document.getElementById("revealRow").classList.add("hide");      // 已看答案，别再点第二次
   document.getElementById("nextAfterWrong").classList.remove("hide");
   save();
 }
