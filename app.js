@@ -2045,7 +2045,7 @@ function onTap(e){
     const x = ox + c*cell, y = oy + r*cell;
     marks.innerHTML = `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="#1a1a1a" opacity=".5"/>`;
     document.getElementById("fb").className = "fb no";
-    document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以看答案，但这题不算完成）";
+    document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以看答案，这题会留到下次再练）";
     document.getElementById("types").classList.remove("hide");
     coolDown(1200);                              // 先停一下：别让孩子点了错就换一个点接着试
   }
@@ -2074,8 +2074,8 @@ function revealAnswer(reason){
   // 本会话内再出现一次（只重排一次，避免死循环）
   if(!timeUp && !requeued[curIdx]){ requeued[curIdx] = 1; queue.push(curIdx); }
   document.getElementById("fb").textContent = (reason && reason !== "看答案")
-      ? ("已记错（" + reason + "），红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。")
-      : "红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。";
+      ? ("红圈是正解（记下了：" + reason + "）。这题会留到下次再练，点棋盘继续。")
+      : "红圈是正解。这题会留到下次再练。点棋盘继续。";
   document.getElementById("types").classList.add("hide");
   document.getElementById("nextAfterWrong").classList.remove("hide");
   save();
