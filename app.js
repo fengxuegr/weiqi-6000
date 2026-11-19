@@ -475,6 +475,7 @@ function load(){
       o.today = (o.today && typeof o.today === "object") ? o.today : {d:"", n:0, sec:0};
       o.sfx = (o.sfx && typeof o.sfx === "object") ? o.sfx : {on:true, vol:0.45};
       if(o.autoNext === undefined) o.autoNext = true;
+      o.roundBase = Math.max(0, +o.roundBase || 0);   // 本轮起点（当时的 today.sec），用于扣减加练时长
       return o;
     }
   }catch(e){}
@@ -1629,6 +1630,8 @@ function tick(){
       remaining > 0 ? ("剩余 " + m + ":" + String(s).padStart(2,"0")) : "0:00";
   if(remaining <= 0 && !timeUp){
     timeUp = true; running = false; stopTimer(); stopSecClock(); queue = []; endSession(); clearSess(); SFX.timeup();
+    S.roundBase = S.today.sec || 0;   // 本轮到此为止，下次再开始是新一轮
+    save();
     flashBoard("时间到", "点返回看进度 · 或再来 5 分钟");
     document.getElementById("pause").classList.add("hide");
     document.getElementById("addTime").classList.remove("hide");
@@ -1673,6 +1676,7 @@ function addFiveMinutes(){
   const st = lvSt(S.lv);
   requeued = {};                    // 队列重建了，之前「本会话已重排」的标记要一并清掉
   queue = planList(S.lv).filter(k => !st.done[k]);
+  S.roundBase = S.today.sec || 0;   // 加时算独立一轮，不影响下次的扣减
   startSecClock(0);
   startCountdown(5 * 60 * 1000);
   document.getElementById("fb").className = "fb";
@@ -1749,9 +1753,21 @@ document.getElementById("start").onclick = ()=>{
     const targetSec = S.dailyMin * 60;
     const doneSec = (S.today.d === today() ? (S.today.sec || 0) : 0);
     let leftSec = targetSec - doneSec;
-    // 今天已经做够：按"设定时长"再给一轮，不要硬塞 5 分钟
-    // （以前写死 300，设 1 分钟的人做完一轮再开始就会被塞成 5 分钟，看着像设置被改了）
-    if(leftSec <= 0) leftSec = targetSec;
+    // 今天已经做够：再开一轮，但要按「这一轮已经用掉多少」扣，不能每次都给满。
+    // roundBase = 本轮起点（当时的 today.sec）。否则做完 2 分钟、再开一轮用 30 秒、
+    // 返回再进来又是满 2 分钟——靠退出重进就能无限刷时间。
+    if(leftSec <= 0){
+      const base = S.roundBase || 0;
+      const usedThisRound = Math.max(0, doneSec - base);
+      if(usedThisRound >= targetSec){
+        leftSec = targetSec;      // 这一轮也用完了：重新起一轮
+        S.roundBase = doneSec;
+      } else {
+        leftSec = targetSec - usedThisRound;
+      }
+    } else {
+      S.roundBase = doneSec;      // 今日额度还没用完，本轮从当前位置起算
+    }
     if(leftSec < 60) leftSec = 60;       // 至少 1 分钟，免得一进来就"时间到"
     roundMin = Math.round(leftSec / 60);
     startCountdown(leftSec * 1000);
