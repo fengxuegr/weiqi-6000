@@ -1524,26 +1524,6 @@ document.getElementById("qrFile").onchange = async (e)=>{
   }
 };
 
-/* 手滑点错了：不记错因、不给答案，回滚「本次错」与累计错点（A-13） */
-document.getElementById("oops").onclick = ()=>{
-  if(paused) return;
-  document.getElementById("types").classList.add("hide");
-  const marks = document.getElementById("marks");
-  if(marks) marks.innerHTML = "";
-  const fb = document.getElementById("fb");
-  fb.className = "fb";
-  fb.textContent = "好，接着想。点对了才算过";
-  if(preWrong){
-    bad = preWrong.bad;
-    qRec(S.lv, curIdx)[1] = preWrong.wrongCount;
-    wrongThisQ = Math.max(0, wrongThisQ - 1);   // 既然是手滑，这次不算"试错"
-    resetCool();                                // 手滑是误触，不该还锁着棋盘
-    document.getElementById("iw").textContent = bad;
-    save();
-    preWrong = null;
-  }
-};
-
 document.getElementById("scanCancel").onclick = ()=>{
   stopScan();
   document.getElementById("codeHint").textContent = "已取消扫码";
@@ -1551,7 +1531,6 @@ document.getElementById("scanCancel").onclick = ()=>{
 
 /* ---------- 做题 ---------- */
 let queue = [], cur = null, curIdx = -1, alive = [], cell = 20, ox = 0, oy = 0, ok = 0, bad = 0, answered = false, step = 0, placed = [];
-let preWrong = null;   // 一次误触前的「本次错」快照，进下一题即清空
 /* curIdx 单独存题号，不再往 DATA 的题目对象上挂 _i 字段。
    alive = 当前仍与「已走序列」一致的正解线路候选集，跨手保持（见 branchStep）。 */
 let timeUp = false, tickId = null, remaining = 0, running = false, lastTick = 0;
@@ -1815,7 +1794,6 @@ function scheduleAutoNext(){
 
 function nextQ(){
   clearTimeout(autoTimer); autoTimer = null;
-  preWrong = null;
   document.getElementById("nextAfterWrong").classList.add("hide");
   if(timeUp){ document.getElementById("fb").className="fb";
               document.getElementById("fb").textContent="时间到，点右上「返回」看今天的进度"; return; }
@@ -2053,7 +2031,6 @@ function onTap(e){
     }
   } else {
     const rec = qRec(S.lv, curIdx);
-    preWrong = {bad: bad, wrongCount: rec[1]};   // 供「手滑」回滚
     bad++;
     rec[1]++;
     wrongThisQ++;

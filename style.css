@@ -61,7 +61,6 @@
   --lv-track:#ddd0b8;      /* 级别卡细进度条轨道 */
   --rnd-done:#cfae7f;      /* 轮次条 · 已完成 */
   --rnd-done-ink:#4a3418;  /* 轮次条 · 已完成文字 5.58:1 */
-  --oops-ink:#8a5a2b;      /* 「手滑」次级按钮文字 5.68:1 */
   --cal-empty:#faf7f1;     /* 日历 · 非本月空格 */
   --ok-line-soft:#cfe3c4;  /* 成功组 · 浅描边（本轮完成小结）*/
 
@@ -193,8 +192,6 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
 .typesRow button{border:1px solid var(--line-2);background:var(--surface);border-radius:var(--r-sm);
               padding:12px 4px;font-size:var(--fs-sm);font-family:inherit;color:var(--ink-2);
               font-weight:600;min-height:48px;cursor:pointer}
-.typesOops{width:100%;margin-top:8px;border:1px dashed var(--line-2);background:var(--surface-2);border-radius:var(--r-sm);
-           padding:10px;font-size:12.5px;font-family:inherit;color:var(--oops-ink);cursor:pointer}
 /* 「就是想看答案」：只在答错后出现（放在错因区里），所以做成整行宽，不必做得歪歪扭扭 */
 .typesReveal{width:100%;margin-top:8px;border:1px solid var(--line-2);background:var(--surface);
              border-radius:var(--r-sm);padding:11px 10px;min-height:44px;
