@@ -1646,6 +1646,7 @@ function tick(){
     flashBoard("时间到", "点返回看进度 · 或再来 5 分钟");
     document.getElementById("pause").classList.add("hide");
     document.getElementById("addTime").classList.remove("hide");
+    document.getElementById("revealRow").classList.add("hide");   // 时间到就不给看答案了
     document.getElementById("fb").className = "fb";
     document.getElementById("fb").textContent = "时间到，这轮就到这儿" +
         ((S.today.sec || 0) >= S.dailyMin*60 ? "（今天的 " + S.dailyMin + " 分钟够了）" : "");
@@ -1853,6 +1854,7 @@ function nextQ(){
   document.getElementById("fb").className = "fb";
   document.getElementById("types").classList.add("hide");
   setTypesDisabled(false);                     // 新题开放错因区（上一局若停在暂停态可能还锁着）
+  document.getElementById("revealRow").classList.remove("hide");   // 新题重新给「看答案」入口
   draw();
   saveSess();
 }
@@ -2069,36 +2071,41 @@ function onTap(e){
     coolDown(1200);                              // 先停一下：别让孩子点了错就换一个点接着试
   }
 }
+/** 看正解：错因按钮和「实在想不出」共用同一条路径。
+ *  语义统一——这题没做出来：不计完成、不计今日、不进活跃地图，转待重做，稍后还会再出现。 */
+function revealAnswer(reason){
+  if(paused) return;                              // 暂停时不结算
+  if(answered) return;                            // 已做完/已看过答案，再点只会污染数据
+  if(timeUp) return;                              // 时间到＝本轮结束
+  if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
+  S.wrong[S.lv][curIdx] = reason || "看答案";
+  if(!S.retry[S.lv]) S.retry[S.lv] = {};
+  S.retry[S.lv][curIdx] = 1;
+  answered = true;
+  const a = (() => {
+    const line = alive[0] || [];
+    return line[step] || line[0];      // 当前手数的正解点；已走完则回退到首手
+  })();
+  if(a){
+    const marks = document.getElementById("marks");
+    const x = ox + (a[1]-document.getElementById("svg")._c0)*cell;
+    const y = oy + (a[0]-document.getElementById("svg")._r0)*cell;
+    marks.innerHTML += `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="none" stroke="#c0392b" stroke-width="3"/>`;
+  }
+  // 本会话内再出现一次（只重排一次，避免死循环）
+  if(!timeUp && !requeued[curIdx]){ requeued[curIdx] = 1; queue.push(curIdx); }
+  document.getElementById("fb").textContent = (reason && reason !== "看答案")
+      ? ("已记错（" + reason + "），红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。")
+      : "红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。";
+  document.getElementById("types").classList.add("hide");
+  document.getElementById("nextAfterWrong").classList.remove("hide");
+  save();
+}
 document.querySelectorAll("#types .typesRow button").forEach(b=>{
-  b.onclick = ()=>{
-    if(paused) return;                       // 暂停时不结算错因（A-14）
-    if(answered) return;                     // 这题已做完/已看过答案，再记错因只会污染数据
-    if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
-    S.wrong[S.lv][curIdx] = b.dataset.t;
-    // 看答案 = 这题没做出来：不计完成、不计今日、不进活跃地图，转为待重做
-    if(!S.retry[S.lv]) S.retry[S.lv] = {};
-    S.retry[S.lv][curIdx] = 1;
-    answered = true;
-    const a = (() => {
-      const b = alive[0] || [];
-      return b[step] || b[0];      // 当前手数的正解点；已走完则回退到首手
-    })();
-    if(a){
-      const marks = document.getElementById("marks");
-      const x = ox + (a[1]-document.getElementById("svg")._c0)*cell;
-      const y = oy + (a[0]-document.getElementById("svg")._r0)*cell;
-      marks.innerHTML += `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="none" stroke="#c0392b" stroke-width="3"/>`;
-    }
-    // 本会话内再出现一次（只重排一次，避免死循环）
-    if(!timeUp && !requeued[curIdx]){ requeued[curIdx] = 1; queue.push(curIdx); }
-    document.getElementById("fb").textContent = "已记错（" + b.dataset.t + "），红圈是正解。这题不算完成，稍后还会出现。点棋盘继续。";
-    document.getElementById("types").classList.add("hide");
-    document.getElementById("nextAfterWrong").classList.remove("hide");
-    save();
-  };
+  b.onclick = ()=>{ revealAnswer(b.dataset.t); };
 });
-document.getElementById("nextAfterWrong").onclick = ()=>{
-  document.getElementById("nextAfterWrong").classList.add("hide");
+document.getElementById("revealBtn").onclick = ()=>{ revealAnswer("看答案"); };
+document.getElementById("nextAfterWrong").onclick = ()=>{  document.getElementById("nextAfterWrong").classList.add("hide");
   nextQ();
 };
 renderHome();

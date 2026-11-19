@@ -176,6 +176,15 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
        color:var(--no)}
 .fb.no::before{content:"✕";margin-right:8px;font-size:17px;font-weight:700}
 
+/* 「实在想不出？看答案」：常驻但刻意做得不抢眼（文字链接样式），
+   让孩子知道有出口，又不会一进来就想点。点了等于这题没做出来（不计完成、稍后重做）。 */
+.revealRow{display:flex;justify-content:center;margin-top:2px}
+.reveal{
+  background:none;border:0;padding:10px 14px;min-height:40px;cursor:pointer;
+  font-family:inherit;font-size:var(--fs-xs);color:var(--ink-3);
+  text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--ink-4)}
+.reveal:active{color:var(--brand);text-decoration-color:var(--brand)}
+
 .types{display:block;margin-top:10px}
 .typesQ{font-size:12px;color:var(--ink-3);margin-bottom:6px;line-height:1.5}
 .typesRow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
