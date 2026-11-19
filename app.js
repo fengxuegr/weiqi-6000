@@ -1590,6 +1590,9 @@ function saveSess(){
   // 否则切后台/锁屏会把它写回来，下次打开就是「接着上次 · 1 分钟」——
   // 那 1 分钟是恢复路径的下限兜底，看着像"设置被改成了 1 分钟"。
   if(timeUp) return;
+  // 队列空了＝这一轮已经做完（"做完啦"）。存下来的快照恢复后只剩最后一题，
+  // 再做一遍还会让今日题数 +1，凭空多算一题。
+  if(!queue.length) return;
   S.sess = { day: today(), at: Date.now(), lv: S.lv, pass: lvSt(S.lv).pass, mode: S.dailyMode,
              left: remaining, queue: queue.slice(), cur: curIdx,
              done: sessN, sec: sessSec, custom: customMode };
@@ -1948,6 +1951,11 @@ function solved(capText){
     if(!S.wrong[S.lv][curIdx]) S.wrong[S.lv][curIdx] = "试错 " + wrongThisQ + " 次";
     if(!S.retry[S.lv]) S.retry[S.lv] = {};
     S.retry[S.lv][curIdx] = 1;
+  }
+  // 重做时整题一次没错（首手就对、中途也没错）→ 这题算真会了，从错题集移除。
+  // 判据用「首答」而不是「最终做对」：首答才排得掉"试出来的"和"记得上次点这里"。
+  if(S.wrong[S.lv] && S.wrong[S.lv][curIdx] && r[0] === 1 && wrongThisQ === 0){
+    delete S.wrong[S.lv][curIdx];
   }
   markDone();
   document.getElementById("ir").textContent = ok;
