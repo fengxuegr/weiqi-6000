@@ -1736,7 +1736,7 @@ document.getElementById("start").onclick = ()=>{
   // 只有限时模式才显示暂停按钮
   document.getElementById("pause").classList.toggle("hide", S.dailyMode !== "time");
 
-  let initSec = 0;
+  let initSec = 0, roundMin = S.dailyMin;   // 本轮实际拿到多少分钟（今天已做过一部分时，会小于设置值）
   if(snap){
     // 接着上次被打断的那次：题目从当前题起，剩余时间也接上
     queue = snap.queue.slice();
@@ -1747,7 +1747,9 @@ document.getElementById("start").onclick = ()=>{
       // 上限：今天还有额度就用额度，已经做够就按设定时长（别再写死成 1 分钟/5 分钟）
       const rest = S.dailyMin*60 - (S.today.sec || 0);
       const capSec = rest > 0 ? rest : S.dailyMin*60;
-      startCountdown(Math.max(60000, Math.min(snap.left || 0, capSec*1000)));
+      const ms = Math.max(60000, Math.min(snap.left || 0, capSec*1000));
+      roundMin = Math.round(ms / 60000);
+      startCountdown(ms);
     }
   } else if(S.dailyMode === "count"){
     queue = all.slice(0, S.dailyCount);
@@ -1761,6 +1763,7 @@ document.getElementById("start").onclick = ()=>{
     // （以前写死 300，设 1 分钟的人做完一轮再开始就会被塞成 5 分钟，看着像设置被改了）
     if(leftSec <= 0) leftSec = targetSec;
     if(leftSec < 60) leftSec = 60;       // 至少 1 分钟，免得一进来就"时间到"
+    roundMin = Math.round(leftSec / 60);
     startCountdown(leftSec * 1000);
   } else {
     queue = all.slice();          // 自由模式：不限量，做到点返回
@@ -1770,7 +1773,9 @@ document.getElementById("start").onclick = ()=>{
   const st2 = lvSt(S.lv);
   document.getElementById("phead").textContent =
       DATA[S.lv].lb + " · 第 " + st2.pass + " 轮 · " +
-      (S.dailyMode==="free" ? "自由" : (S.dailyMode==="count" ? S.dailyCount+" 题" : S.dailyMin+" 分钟")) +
+      // 限时模式要报"本轮实际拿到的分钟数"，不是设置值：今天做过一部分时这轮可能只有 5 分钟，
+      // 若照抄设置里的 15，用户会以为"明明 15 分钟怎么 5 分钟就结束"。
+      (S.dailyMode==="free" ? "自由" : (S.dailyMode==="count" ? S.dailyCount+" 题" : roundMin+" 分钟")) +
       (snap ? " · 接着上次" : "");
   document.getElementById("home").classList.add("hide");
   document.getElementById("play").classList.remove("hide");
