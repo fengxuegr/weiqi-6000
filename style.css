@@ -431,6 +431,12 @@ input[type=range]{width:96px;accent-color:var(--brand);vertical-align:middle;hei
 .wrow:last-of-type{border-bottom:0}
 .wrow .wn{font-weight:700;color:var(--ink-1);min-width:62px}
 .wrow .wr{flex:1;color:var(--brand)}
+/* 错题列表默认只摊开前 5 道，其余折叠：24 道全铺开会把首页顶得看不见底 */
+.wlist .wrow:nth-child(n+6){display:none}
+.wlist.open .wrow:nth-child(n+6){display:flex}
+.wmore{width:100%;border:0;border-top:1px dashed var(--line-2);background:var(--surface-2);
+       padding:11px;font-family:inherit;font-size:var(--fs-xs);color:var(--brand);cursor:pointer}
+.wmore:active{background:var(--brand-soft)}
 .wact{display:flex;gap:8px;padding:10px;background:var(--surface-2);
       border-top:1px solid var(--track)}
 .wact .chip{flex:1}

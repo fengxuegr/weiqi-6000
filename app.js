@@ -1110,6 +1110,10 @@ function renderWrong(){
   const idxs = wrongOf(S.lv);
   const btn = document.getElementById("wrongBtn");
   if(btn) btn.textContent = idxs.length + " 道";
+  // 错题是按「档」分开放的（题目编号只在档内唯一），标题必须写明是哪一档，
+  // 否则很容易误以为是全部级别的错题。
+  const title = document.getElementById("wrongTitle");
+  if(title) title.textContent = "错题集 · " + DATA[S.lv].lb;
   const box = document.getElementById("wrongList");
   if(!box) return;
   if(!idxs.length){
@@ -1117,15 +1121,29 @@ function renderWrong(){
     return;
   }
   const reasons = S.wrong[S.lv] || {};
-  let html = "";
+  // 默认只摊开 5 道，其余折叠（24 道全铺开会把首页顶到看不见底）。
+  const COLLAPSE = 5;
+  let html = '<div class="wlist" id="wlist">';
   idxs.slice(0, 200).forEach(i=>{
     html += '<div class="wrow"><span class="wn">第 ' + (i+1) + ' 题</span>' +
             '<span class="wr">' + esc(reasons[i] || "未记原因") + '</span></div>';
   });
+  html += '</div>';
+  if(idxs.length > COLLAPSE){
+    html += '<button class="wmore" id="wmore">展开全部 ' + idxs.length + ' 道</button>';
+  }
   if(idxs.length > 200) html += '<div class="emptyLine">…另有 ' + (idxs.length-200) + ' 道未显示</div>';
   html += '<div class="wact"><button class="chip" id="practiceWrong">重练这 ' + idxs.length + ' 道</button>' +
           '<button class="chip" id="clearWrong">清空本档</button></div>';
   box.innerHTML = html;
+
+  const more = document.getElementById("wmore");
+  if(more){
+    more.onclick = ()=>{
+      const open = document.getElementById("wlist").classList.toggle("open");
+      more.textContent = open ? "收起" : ("展开全部 " + idxs.length + " 道");
+    };
+  }
 
   document.getElementById("practiceWrong").onclick = ()=>{
     const list = wrongOf(S.lv).slice();
@@ -1971,9 +1989,11 @@ function solved(capText){
     if(!S.retry[S.lv]) S.retry[S.lv] = {};
     S.retry[S.lv][curIdx] = 1;
   }
-  // 重做时整题一次没错（首手就对、中途也没错）→ 这题算真会了，从错题集移除。
-  // 判据用「首答」而不是「最终做对」：首答才排得掉"试出来的"和"记得上次点这里"。
-  if(S.wrong[S.lv] && S.wrong[S.lv][curIdx] && r[0] === 1 && wrongThisQ === 0){
+  // 重做时整题一次没错 → 这题算真会了，从错题集移除。
+  // 判据只用 wrongThisQ：它为 0 就蕴含"第一手就点对了"（任何一次错都会让它 +1）。
+  // 绝不能用 qRec[0]——那是历史首答，只写一次，第一次做错过就永远是 0，
+  // 错题集就再也清不掉了（曾导致重练 25 道全做对也只减少 1 道）。
+  if(S.wrong[S.lv] && S.wrong[S.lv][curIdx] && wrongThisQ === 0){
     delete S.wrong[S.lv][curIdx];
   }
   markDone();
