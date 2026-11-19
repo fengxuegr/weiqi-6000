@@ -1675,7 +1675,10 @@ function addFiveMinutes(){
   document.getElementById("pause").textContent = "暂停";
   const st = lvSt(S.lv);
   requeued = {};                    // 队列重建了，之前「本会话已重排」的标记要一并清掉
-  queue = planList(S.lv).filter(k => !st.done[k]);
+  // 和 start 里同一套规则：待重做的题即使"已完成"也要排进来，
+  // 否则加时之后错题就再也不会出现在队首（上次修 start 时漏了这一处）。
+  const rtAdd = S.retry[S.lv] || {};
+  queue = planList(S.lv).filter(k => !st.done[k] || rtAdd[k]);
   S.roundBase = S.today.sec || 0;   // 加时算独立一轮，不影响下次的扣减
   startSecClock(0);
   startCountdown(5 * 60 * 1000);
