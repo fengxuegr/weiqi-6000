@@ -2073,9 +2073,23 @@ function revealAnswer(reason){
   }
   // 本会话内再出现一次（只重排一次，避免死循环）
   if(!timeUp && !requeued[curIdx]){ requeued[curIdx] = 1; queue.push(curIdx); }
+  // 题目要求是什么（题库只存题干，没有文字解释）+ 这一手的客观效果（能提几个子）。
+  // 这两样都能从数据里算准；再深的「为什么是手筋」需要棋力分析，题库里没有。
+  const goal = (cur && cur.t) ? String(cur.t) : "";
+  let capNow = 0;
+  if(a){
+    const saved = placed;
+    placed = placed.concat([[a[0], a[1], 1]]);
+    try{
+      const pb = playBoard();
+      capNow = pb.capLog[pb.capLog.length - 1] || 0;
+    }catch(e){}
+    placed = saved;
+  }
+  const head = goal ? ("这题是「" + goal + "」。红圈就是正解" + (capNow ? "，这手能提掉 " + capNow + " 个子" : "")) : "红圈是正解";
   document.getElementById("fb").textContent = (reason && reason !== "看答案")
-      ? ("红圈是正解（记下了：" + reason + "）。这题会留到下次再练，点棋盘继续。")
-      : "红圈是正解。这题会留到下次再练。点棋盘继续。";
+      ? (head + "（记下了：" + reason + "）。这题会留到下次再练。")
+      : (head + "。这题会留到下次再练。");
   document.getElementById("types").classList.add("hide");
   document.getElementById("nextAfterWrong").classList.remove("hide");
   save();
