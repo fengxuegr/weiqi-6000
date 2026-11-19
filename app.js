@@ -2045,7 +2045,7 @@ function onTap(e){
     const x = ox + c*cell, y = oy + r*cell;
     marks.innerHTML = `<circle cx="${x}" cy="${y}" r="${cell*0.46}" fill="#1a1a1a" opacity=".5"/>`;
     document.getElementById("fb").className = "fb no";
-    document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以选错因、或直接看答案，但这题不算完成）";
+    document.getElementById("fb").textContent = "不对，再想想（实在想不出，可以看答案，但这题不算完成）";
     document.getElementById("types").classList.remove("hide");
     coolDown(1200);                              // 先停一下：别让孩子点了错就换一个点接着试
   }
@@ -2080,9 +2080,6 @@ function revealAnswer(reason){
   document.getElementById("nextAfterWrong").classList.remove("hide");
   save();
 }
-document.querySelectorAll("#types .typesRow button").forEach(b=>{
-  b.onclick = ()=>{ revealAnswer(b.dataset.t); };
-});
 document.getElementById("revealBtn").onclick = ()=>{ revealAnswer("看答案"); };
 document.getElementById("nextAfterWrong").onclick = ()=>{  document.getElementById("nextAfterWrong").classList.add("hide");
   nextQ();

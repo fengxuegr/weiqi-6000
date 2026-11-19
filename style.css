@@ -187,15 +187,9 @@ svg{width:100%;height:auto;display:block;touch-action:manipulation}
 .reveal:active{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-strong)}
 
 .types{display:block;margin-top:10px}
-.typesQ{font-size:12px;color:var(--ink-3);margin-bottom:6px;line-height:1.5}
-/* 错因：只是「回想一下错在哪」的选项，不该和主操作一样重——做成带下划线的文字，
-   靠 --brand 色和下划线给出可点暗示，点击区域仍然留到 44px 高。 */
-.typesRow{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:2px;margin-left:-12px}
-.typesRow button{border:0;background:none;border-radius:var(--r-sm);
-              padding:10px 12px;font-size:var(--fs-sm);font-family:inherit;color:var(--brand);
-              min-height:44px;cursor:pointer;
-              text-decoration:underline;text-underline-offset:4px;
-              text-decoration-color:rgba(151,48,44,.34)}
+/* 错因不再是可点选项，只是一句提醒孩子「往这几个方向想」的提示语，
+   所以字号往上提、不用按钮样式，也不再产生点击事件。 */
+.typesThink{font-size:16px;line-height:1.6;color:var(--ink-2);margin:4px 0 12px}
 /* 「就是想看答案」：只在答错后出现（放在错因区里），所以做成整行宽，不必做得歪歪扭扭 */
 .typesReveal{width:100%;margin-top:8px;border:1px solid var(--line-2);background:var(--surface);
              border-radius:var(--r-sm);padding:12px 10px;min-height:44px;
@@ -286,7 +280,6 @@ body{overscroll-behavior:none;
 @media (max-width:380px){
   .lv{grid-template-columns:repeat(2,1fr)}
   .info div{padding:6px}
-  .typesRow button{padding:8px 8px;font-size:var(--fs-xs)}
   .cell{height:42px}
 }
 /* 矮屏（横屏或小屏手机）：压缩做题页留白，保证「错因」按钮不用滚动就能点到 */
