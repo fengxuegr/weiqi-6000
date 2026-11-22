@@ -2099,7 +2099,6 @@ function onTap(e){
   if(paused) return;                                                    // 已暂停，棋盘不响应
   if(timeUp) return;                                                    // 时间到就是结束了：只能「返回」或「再来 5 分钟」
   if(answered) { clearTimeout(autoTimer); autoTimer = null; nextQ(); return; }
-  if(Date.now() < lockUntil) return;                                    // 答错冷却中：忽略，不计错也不延长
   const el = e.currentTarget, rect = el.getBoundingClientRect(), vb = el.viewBox.baseVal;
   const px = (e.clientX - rect.left) / rect.width * vb.width;
   const py = (e.clientY - rect.top) / rect.height * vb.height;
@@ -2112,9 +2111,12 @@ function onTap(e){
   // 在「还活着的线路」里按本手收敛，而不是每手重新去 qa 里取第一个命中项
   const j = branchStep(alive, step, rr, cc);
   const hit = j.hit;
-  // 原地连点同一个错点：忽略，不叠加成"试错 N 次"。
-  // 必须放在判题之后——白棋应了一手局面会变，同一个位置可能已经是正解，
-  // 提前挡掉的话孩子想通了也点不动（曾经就是这个 bug）。
+  // 下面两条只拦「错点」，一律放在判题之后：
+  // ① 冷却期：答错后 1.2 秒内不认错点（防连点试错），但点到正解要照常放行——
+  //    孩子想通了立刻点，不该被这 1.2 秒卡住。
+  // ② 原地连点同一个错点：不叠加成"试错 N 次"。也不能提前挡：
+  //    白棋应了一手局面会变，同一个位置可能已经是正解。
+  if(!hit && Date.now() < lockUntil) return;
   if(!hit && lastBadPt && lastBadPt[0] === rr && lastBadPt[1] === cc) return;
 
   // 首答判定：只认本会话的第一手。这是"重新算对"和"记得上次点这里"的唯一分界
