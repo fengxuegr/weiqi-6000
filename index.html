@@ -205,7 +205,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">426b7b144ef7</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">dbaffbe3aa76</span><br><button class="chk" id="checkUpdate">检查更新</button></div>
 </div>
 
 <!--PWA-UPDATE-->
@@ -237,7 +237,9 @@
 
   var bar = document.getElementById("updateBar");
   var supported = "serviceWorker" in navigator && location.protocol === "https:";
-  if (!supported) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); return; }
+  if (!supported) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
+    var cb0 = document.getElementById("checkUpdate"); if (cb0) cb0.style.display = "none";
+    return; }
 
   var waiting = null, asked = false, pending = false, snoozeUntil = 0;
   var play = document.getElementById("play");
@@ -277,6 +279,39 @@
   navigator.serviceWorker.addEventListener("controllerchange", function () {
     if (asked) location.reload();
   });
+
+  // 手动「检查更新」：不依赖浏览器的自动检查节奏，点一下立刻问服务器
+  var chkBtn = document.getElementById("checkUpdate");
+  if (chkBtn) {
+    var chkBusy = false;
+    chkBtn.onclick = function () {
+      if (chkBusy) return;
+      chkBusy = true;
+      var old = chkBtn.textContent;
+      chkBtn.textContent = "检查中…";
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        if (!reg) { chkBtn.textContent = "暂不可用"; chkBusy = false; return; }
+        return reg.update().then(function () {
+          setTimeout(function () {
+            if (reg.waiting && navigator.serviceWorker.controller) {
+              snoozeUntil = 0;              // 手动检查＝明确想看，别再压着
+              showUpdate(reg);
+              chkBtn.textContent = "发现新版本";
+            } else {
+              chkBtn.textContent = "已是最新";
+            }
+            setTimeout(function () { chkBtn.textContent = old; chkBusy = false; }, 2200);
+          }, 1500);
+        }).catch(function () {
+          chkBtn.textContent = "检查失败";
+          setTimeout(function () { chkBtn.textContent = old; chkBusy = false; }, 2200);
+        });
+      }).catch(function () {
+        chkBtn.textContent = "检查失败";
+        chkBusy = false;
+      });
+    };
+  }
 
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js").then(function (reg) {
