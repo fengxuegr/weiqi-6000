@@ -205,7 +205,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">9ad4f57cd0ee</span></div>
+<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">426b7b144ef7</span></div>
 </div>
 
 <!--PWA-UPDATE-->
@@ -239,16 +239,19 @@
   var supported = "serviceWorker" in navigator && location.protocol === "https:";
   if (!supported) { if (bar && bar.parentNode) bar.parentNode.removeChild(bar); return; }
 
-  var waiting = null, asked = false, pending = false, snoozed = false;
+  var waiting = null, asked = false, pending = false, snoozeUntil = 0;
   var play = document.getElementById("play");
   function playing(){ return !!(play && !play.classList.contains("hide")); }
-  function showBar(){ if (bar && !snoozed) bar.classList.remove("hide"); }
+  // 「稍后」只压 30 分钟：原来是个布尔量，页面不重载就永远不再提示——
+  // iOS 上的 PWA 能挂着好几天不重载，等于点一次就再也收不到更新提醒了。
+  function snoozed(){ return Date.now() < snoozeUntil; }
+  function showBar(){ if (bar && !snoozed()) bar.classList.remove("hide"); }
   function hideBar(){ if (bar) bar.classList.add("hide"); }
 
   // 做题中不打断：挂起，等返回首页再提示（D-03）
   function showUpdate(reg) {
     waiting = reg;
-    if (snoozed) return;
+    if (snoozed()) return;
     if (playing()) { pending = true; return; }
     pending = false;
     showBar();
@@ -268,7 +271,7 @@
       location.reload();
     }
   };
-  if (later) later.onclick = function () { snoozed = true; pending = false; hideBar(); };
+  if (later) later.onclick = function () { snoozeUntil = Date.now() + 30 * 60 * 1000; pending = false; hideBar(); };
 
   // 新版本接管后重载页面，用户立刻看到新版
   navigator.serviceWorker.addEventListener("controllerchange", function () {
