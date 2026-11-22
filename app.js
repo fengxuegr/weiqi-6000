@@ -2110,12 +2110,14 @@ function onTap(e){
     const rec = qRec(S.lv, curIdx);
     if(rec[0] === null){
       rec[0] = hit ? 1 : 0; rec[2] = Date.now() - t0;
-      // 今日首答：只在这道题第一次被作答时计一次，重做不再算首答
-      if(!S.today || S.today.d !== today()) S.today = freshToday();
-      S.today.fa = (S.today.fa || 0) + 1;
-      if(hit) S.today.fo = (S.today.fo || 0) + 1;
-      save();
     }
+    // 今日首答：按「今天每一次上手的第一手」算，重做旧题也算。
+    // 不能挂在 rec[0] === null 里面——那样今天做的要是以前做过的题（换轮重刷），
+    // 一次都记不上，界面就会一直显示"今天还没有首答"。
+    if(!S.today || S.today.d !== today()) S.today = freshToday();
+    S.today.fa = (S.today.fa || 0) + 1;
+    if(hit) S.today.fo = (S.today.fo || 0) + 1;
+    save();
   }
 
   if(hit){
