@@ -1,7 +1,6 @@
 
 const BASE = new URLSearchParams(location.search).has("dev") ? "gotest_loop_dev" : "gotest_loop_v1";
 const DAILY = 20;           // 默认每日题数（设置里可填 5~2000）
-const RETRY_MAX = 3;        // 待重做的题最多插到队伍前面几条，避免卡住新内容
 const PKEY = BASE + "_profiles";
 const CKEY = BASE + "_current";
 
@@ -524,17 +523,13 @@ function firstStat(lv){
   }
   return allN ? {rate: Math.round(okN/allN*100), okN, allN} : null;
 }
-/** 本轮要做哪些题号（0-based）：待重做的插到最前面，其余按题号 */
+/** 本轮要做哪些题号（0-based）：第 1 题到目标题。
+ *  错题**不往这里插**——正式练习（定题数 / 定时）一律按题号走，
+ *  错题统一在首页「错题集 → 重练这 N 道」处理。 */
 function planList(i){
   const st = lvSt(i), g = goalOf(i, st.pass);
   const idx = []; for(let k=0;k<g;k++) idx.push(k);
-  // 只保留老师方案：每轮把目标范围内的旧题全部重做一遍
-  const base = idx;
-  const rt = S.retry[i] || {};
-  const first = base.filter(k => rt[k]).slice(0, RETRY_MAX);
-  if(!first.length) return base;
-  const seen = new Set(first);
-  return first.concat(base.filter(k => !seen.has(k)));
+  return idx;
 }
 
 /* ---------- 首页 ---------- */
@@ -1727,8 +1722,7 @@ function addFiveMinutes(){
   requeued = {};                    // 队列重建了，之前「本会话已重排」的标记要一并清掉
   // 和 start 里同一套规则：待重做的题即使"已完成"也要排进来，
   // 否则加时之后错题就再也不会出现在队首（上次修 start 时漏了这一处）。
-  const rtAdd = S.retry[S.lv] || {};
-  queue = planList(S.lv).filter(k => !st.done[k] || rtAdd[k]);
+  queue = planList(S.lv).filter(k => !st.done[k]);
   S.roundBase = S.today.sec || 0;   // 加时算独立一轮，不影响下次的扣减
   startSecClock(0);
   startCountdown(5 * 60 * 1000);
@@ -1768,8 +1762,7 @@ document.getElementById("start").onclick = ()=>{
   // 待重做的题即使已经"做对过"也要排进来：
   // 「错 3 次才做对」的题同时有 done=1 和 retry=1，只按 done 过滤会把它一起剔掉，
   // 结果 planList 插好的队首白插了。
-  const rtNow = S.retry[S.lv] || {};
-  const all = planList(S.lv).filter(k => !st.done[k] || rtNow[k]);
+  const all = planList(S.lv).filter(k => !st.done[k]);
   const snap = validSess();
 
   customMode = false;
@@ -2034,8 +2027,7 @@ function solved(capText){
   if(wrongThisQ >= 3){
     if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
     if(!S.wrong[S.lv][curIdx]) S.wrong[S.lv][curIdx] = "试错 " + wrongThisQ + " 次";
-    if(!S.retry[S.lv]) S.retry[S.lv] = {};
-    S.retry[S.lv][curIdx] = 1;
+    // 不再写 S.retry：正式练习不插错题，这题只记进错题集，由「重练」入口处理。
   }
   // 重做时整题一次没错 → 这题算真会了，从错题集移除。
   // 判据只用 wrongThisQ：它为 0 就蕴含"第一手就点对了"（任何一次错都会让它 +1）。
