@@ -737,17 +737,18 @@ function calcStreak(){
  * 视图偏好只存运行时，不写进存档，旧存档天然兼容。 */
 const MAP_WEEKS = 12;
 let mapView = "month";
-/** 做题数 → 色阶：1-5 / 6-15 / 16-30 / 31-100 / 101-200 / 200+ 题。
- *  以前 31 题就封顶，一天做 31 题和做 200 题颜色一样，看不出强度差异。 */
+/** 做题数 → 色阶：1-5 / 6-15 / 16-35 / 36-75 / 76-150 / 150+ 题（跨度逐档翻倍）。
+ *  以前 31 题就封顶，一天做 31 题和做 200 题颜色一样；
+ *  也试过 31-100/101-200 这种分法，前几档跨 5/10/15、后面突然跨 70/100，看着很别扭。 */
 function heatLevel(n){
   n = +n || 0;
   if(n === 0) return 0;
-  if(n <= 5) return 1;
-  if(n <= 15) return 2;
-  if(n <= 30) return 3;
-  if(n <= 100) return 4;
-  if(n <= 200) return 5;
-  return 6;
+  if(n <= 5) return 1;       // 跨度 5
+  if(n <= 15) return 2;      // 10
+  if(n <= 35) return 3;      // 20
+  if(n <= 75) return 4;      // 40
+  if(n <= 150) return 5;     // 75
+  return 6;                  // 150+
 }
 function calCell(key, label, hist, tk){
   const n = +(hist[key] || 0);
