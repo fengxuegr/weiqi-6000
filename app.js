@@ -2109,11 +2109,13 @@ function onTap(e){
   // 点在已有棋子上＝误触，不是"想错了"：不计数、不冷却、不进错题。
   // 正解永远是空点，所以这样挡掉不会漏掉任何有效作答。
   if(playBoard().board[rr][cc] !== 0) return;
-  // 重复点刚才那个错点也一样：手滑原地连点，不该叠加成"试错 3 次"。
-  if(lastBadPt && lastBadPt[0] === rr && lastBadPt[1] === cc) return;
   // 在「还活着的线路」里按本手收敛，而不是每手重新去 qa 里取第一个命中项
   const j = branchStep(alive, step, rr, cc);
   const hit = j.hit;
+  // 原地连点同一个错点：忽略，不叠加成"试错 N 次"。
+  // 必须放在判题之后——白棋应了一手局面会变，同一个位置可能已经是正解，
+  // 提前挡掉的话孩子想通了也点不动（曾经就是这个 bug）。
+  if(!hit && lastBadPt && lastBadPt[0] === rr && lastBadPt[1] === cc) return;
 
   // 首答判定：只认本会话的第一手。这是"重新算对"和"记得上次点这里"的唯一分界
   if(!firstJudged && alive.length && alive[0].length){
