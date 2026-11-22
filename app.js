@@ -999,7 +999,7 @@ function makePortable(withWrong, withMap){
   const o = {v:3, kind:"portable", at:Date.now(), nm:cleanName(pname(PID)),
              lv:S.lv, mode:S.mode,
              dailyMode:S.dailyMode, dailyCount:S.dailyCount, dailyMin:S.dailyMin,
-             t:[today(), t.n || 0, t.sec || 0],
+             t:[today(), t.n || 0, t.sec || 0, t.fo || 0, t.fa || 0],
              st:packSt(), retry:packIdx(S.retry)};
   if(withMap){ const m = packMap(); if(m) o.m = m; }
   if(withWrong){
@@ -1035,6 +1035,11 @@ function applyPortable(o){
     if(!S.today || S.today.d !== today()) S.today = freshToday();
     S.today.n   = Math.max((+S.today.n || 0), (+o.t[1] || 0));
     S.today.sec = Math.max((+S.today.sec || 0), (+o.t[2] || 0));
+    // 今日首答：老进度码只有 3 位，没有就保持本机值
+    if(o.t.length >= 5){
+      S.today.fo = Math.max((+S.today.fo || 0), (+o.t[3] || 0));
+      S.today.fa = Math.max((+S.today.fa || 0), (+o.t[4] || 0));
+    }
   }
   // 活跃地图：按日期取较大值补齐，老记录不丢、重复导入幂等
   if(o.m){
@@ -1042,6 +1047,7 @@ function applyPortable(o){
     if(!S.history) S.history = {};
     Object.keys(m).forEach(d=>{ S.history[d] = Math.max((+S.history[d] || 0), m[d]); });
   }
+  S.roundBase = (S.today && S.today.d === today()) ? (S.today.sec || 0) : 0;   // 导入视作新一轮起点
   S.sess = null;                 // 旧会话快照作废，避免和搬来的进度打架
   save();
 }
