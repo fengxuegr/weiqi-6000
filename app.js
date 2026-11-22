@@ -2177,8 +2177,10 @@ function revealAnswer(reason){
   if(timeUp) return;                              // 时间到＝本轮结束
   if(!S.wrong[S.lv]) S.wrong[S.lv] = {};
   S.wrong[S.lv][curIdx] = reason || "看答案";
-  if(!S.retry[S.lv]) S.retry[S.lv] = {};
-  S.retry[S.lv][curIdx] = 1;
+  // 注意：这里**不写** S.retry。retry 的语义是"下次开始练习时插到队首"，
+  // 只留给真正做错的题（错 3 次才做对那种）。看答案的题如果也插队首，
+  // 孩子看完答案、又做了几道别的、一返回再进来，第一道又是它，很烦。
+  // 它在 S.wrong 里（错题集），需要时可以手动「重练」，本会话内也会在队尾再出现一次。
   answered = true;
   const a = (() => {
     const line = alive[0] || [];
