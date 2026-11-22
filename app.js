@@ -866,6 +866,13 @@ document.getElementById("sfxVol").oninput = (e)=>{
   syncSfx();
 };
 document.getElementById("sfxVol").onchange = ()=>{ save(); SFX.stone(); };
+/* 做完一轮时，在棋盘页直接进入下一轮（不必退回首页） */
+document.getElementById("nextRound").onclick = ()=>{
+  const st = lvSt(S.lv);
+  if(st.pass >= 10) return;
+  st.pass++; st.done = {}; clearSess(); save();
+  document.getElementById("start").click();   // 复用 start：重建队列、重置计数、按今日剩余额度计时
+};
 document.getElementById("nextpass").onclick = ()=>{
   const st = lvSt(S.lv);
   if(st.pass >= 10){ alert("这一级 10 轮已走完，本级毕业 🎉"); return; }
@@ -1859,13 +1866,27 @@ function nextQ(){
     // 还会把它拉进待重做队列（curIdx 仍停在最后一题）。
     document.getElementById("types").classList.add("hide");
     document.getElementById("nextAfterWrong").classList.add("hide");
-    document.getElementById("fb").textContent = "本次做完啦，回去看进度";
+    document.getElementById("fb").textContent = "本轮做完啦 · 可以进入下一轮，也可以返回看进度";
     document.getElementById("fb").className="fb ok";
-    flashBoard("做完啦", "点右上「返回」看今天的进度", "ok");
+    // 这一轮做完了：直接给「进入下一轮」的入口，不用先退回首页再点开始
+    const stDone = lvSt(S.lv);
+    const nrBtn = document.getElementById("nextRound");
+    if(nrBtn){
+      if(stDone.pass >= 10){
+        nrBtn.classList.add("hide");
+      }else{
+        nrBtn.textContent = "进入第 " + (stDone.pass + 1) + " 轮（要做 " +
+                            goalOf(S.lv, stDone.pass + 1) + " 题）";
+        nrBtn.classList.remove("hide");
+      }
+    }
+    flashBoard("做完啦", stDone.pass >= 10 ? "本级 10 轮已走完" : "点下面进入下一轮，或返回看进度", "ok");
     return;
   }
   resetCool();                                 // 冷却不能跨题残留
   hideEndMask();                               // 有新题了，把上一轮的「时间到 / 做完啦」收掉
+  const nrHide = document.getElementById("nextRound");
+  if(nrHide) nrHide.classList.add("hide");
   wrongThisQ = 0;
   cur = DATA[S.lv].p[idx]; curIdx = idx; answered = false; step = 0; placed = [];
   // 候选线路跨手保持：原题库用 (20,20) 分隔的是同一棵解答树上的分支，
