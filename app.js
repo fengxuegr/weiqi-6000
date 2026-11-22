@@ -2102,8 +2102,12 @@ function onTap(e){
   const px = (e.clientX - rect.left) / rect.width * vb.width;
   const py = (e.clientY - rect.top) / rect.height * vb.height;
   const c = Math.round((px - ox) / cell), r = Math.round((py - oy) / cell);
-  const rr = r + el._r0, cc = c + el._c0;
-  if(rr<0||rr>18||cc<0||cc>18) return;
+  let rr = r + el._r0, cc = c + el._c0;
+  // 点在棋盘最外圈交叉点上时，取整常常会溢出一格（变成 -1 或 19）。
+  // 以前这里直接 return，用户看到的就是"这个点点了没反应"——尤其在贴边那一行。
+  // 现在吸附回最近的合法交叉点，宁可判一次错也要给出反馈。
+  rr = Math.max(0, Math.min(18, rr));
+  cc = Math.max(0, Math.min(18, cc));
   // 点在已有棋子上＝误触，不是"想错了"：不计数、不冷却、不进错题。
   // 正解永远是空点，所以这样挡掉不会漏掉任何有效作答。
   if(playBoard().board[rr][cc] !== 0) return;
