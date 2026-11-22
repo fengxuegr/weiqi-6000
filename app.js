@@ -1581,6 +1581,7 @@ let sessLast = 0, secCarry = 0, hiddenPause = false; // 时间戳基准 / 不足
 let autoTimer = null;                              // 答对后自动进下一题的定时器
 let lockUntil = 0, coolTimer = null;               // 答错后的棋盘冷却：期间点击直接忽略，把「错了就立刻换点再试」的反射打断
 let t0 = 0, firstJudged = false, sessN = 0, requeued = {};
+let lastBadPt = null;   // 上次点错的位置：重复点同一处算误触，不再计错
 let wrongThisQ = 0;   // 本题这一遍错了几次（进下一题归零）。错到 3 次才做对，基本是试出来的，要收进错题集
 let customMode = false;                            // 当前是不是错题重练（快照要打标记，别被正常练习恢复）
 let lastCapCount = 0;                              // 最后一手吃了几子（吃子那手多留时间看清棋形）
@@ -1839,7 +1840,7 @@ document.getElementById("quit").onclick = ()=>{
   // 光藏起 #play 不够：暂停态、时间到态、冷却定时器、禁用的错因区都会留到下一局，
   // 尤其 setTypesDisabled(true) 之后只有「继续」会解禁，走返回就会让错因按钮一直点不动。
   paused = false; hiddenPause = false; timeUp = false;
-  wrongThisQ = 0;
+  wrongThisQ = 0; lastBadPt = null;
   resetCool();
   setTypesDisabled(false);
   document.getElementById("types").classList.add("hide");
@@ -2094,6 +2095,11 @@ function onTap(e){
   const c = Math.round((px - ox) / cell), r = Math.round((py - oy) / cell);
   const rr = r + el._r0, cc = c + el._c0;
   if(rr<0||rr>18||cc<0||cc>18) return;
+  // 点在已有棋子上＝误触，不是"想错了"：不计数、不冷却、不进错题。
+  // 正解永远是空点，所以这样挡掉不会漏掉任何有效作答。
+  if(playBoard().board[rr][cc] !== 0) return;
+  // 重复点刚才那个错点也一样：手滑原地连点，不该叠加成"试错 3 次"。
+  if(lastBadPt && lastBadPt[0] === rr && lastBadPt[1] === cc) return;
   // 在「还活着的线路」里按本手收敛，而不是每手重新去 qa 里取第一个命中项
   const j = branchStep(alive, step, rr, cc);
   const hit = j.hit;
@@ -2133,6 +2139,7 @@ function onTap(e){
     bad++;
     rec[1]++;
     wrongThisQ++;
+    lastBadPt = [rr, cc];       // 记下这个点：原地连点不再累加
     save();
     SFX.wrong();                                 // 一声轻闷提示：确认"这一手没走对"
     document.getElementById("iw").textContent = bad;
