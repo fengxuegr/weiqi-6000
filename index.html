@@ -205,7 +205,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">dbaffbe3aa76</span><br><button class="chk" id="checkUpdate">检查更新</button></div>
+<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">04ab6654453b</span><br><button class="chk" id="checkUpdate">检查更新</button></div>
 </div>
 
 <!--PWA-UPDATE-->
@@ -251,16 +251,26 @@
   function hideBar(){ if (bar) bar.classList.add("hide"); }
 
   // 做题中不打断：挂起，等返回首页再提示（D-03）
+  // 默认自动更新：发现新版本就激活它并重载。
+  // 唯一例外是「正在做题」——那时不打断，先挂起，等回到首页立刻更新。
+  function applyUpdate() {
+    if (waiting && waiting.waiting) {
+      asked = true;
+      waiting.waiting.postMessage("SKIP_WAITING");
+    } else {
+      location.reload();
+    }
+  }
   function showUpdate(reg) {
     waiting = reg;
     if (snoozed()) return;
     if (playing()) { pending = true; return; }
     pending = false;
-    showBar();
+    applyUpdate();
   }
   if (play && window.MutationObserver) {
     new MutationObserver(function () {
-      if (pending && !playing()) { pending = false; showBar(); }
+      if (pending && !playing()) { pending = false; applyUpdate(); }
     }).observe(play, { attributes: true, attributeFilter: ["class"] });
   }
 
