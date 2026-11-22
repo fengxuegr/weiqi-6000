@@ -1638,7 +1638,9 @@ function saveSess(){
   if(!queue.length) return;
   S.sess = { day: today(), at: Date.now(), lv: S.lv, pass: lvSt(S.lv).pass, mode: S.dailyMode,
              left: remaining, queue: queue.slice(), cur: curIdx,
-             done: sessN, sec: sessSec, custom: customMode };
+             // ok/bad 要分开存：只存 sessN 的话，恢复时会把"本次做题数"当成"本次对"，
+             // 一题错两次再做对，也会显示成 对 1 错 0。
+             done: sessN, ok: ok, bad: bad, sec: sessSec, custom: customMode };
   save();
 }
 function clearSess(){ if(S.sess){ S.sess = null; save(); } }
@@ -1780,7 +1782,9 @@ document.getElementById("start").onclick = ()=>{
     // 接着上次被打断的那次：题目从当前题起，剩余时间也接上
     queue = snap.queue.slice();
     if(snap.cur !== null && snap.cur !== undefined) queue.unshift(snap.cur);
-    sessN = snap.done || 0; ok = sessN;
+    sessN = snap.done || 0;
+    ok = (snap.ok !== undefined) ? snap.ok : sessN;   // 旧快照没有 ok 字段，退回原口径
+    bad = snap.bad || 0;
     initSec = snap.sec || 0;
     if(S.dailyMode === "time"){
       // 上限：今天还有额度就用额度，已经做够就按设定时长（别再写死成 1 分钟/5 分钟）
