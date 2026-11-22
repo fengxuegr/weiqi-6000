@@ -483,11 +483,13 @@ function load(){
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+/** 今日状态：fo/fa = 今日首答答对数 / 首答总题数（只在这题第一次作答时计一次） */
+function freshToday(){ return { d: today(), n: 0, sec: 0, fo: 0, fa: 0 }; }
 function dateKey(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 /** 每答对一题记一次：同时更新今日计数和活跃地图的按日历史 */
 function markDone(){
   if(importUndo) clearUndoImport();          // 一旦产生新题，导入撤销即失效（D-02）
-  if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
+  if(S.today.d !== today()) S.today = freshToday();
   S.today.n++;
   if(!S.history) S.history = {};
   S.history[today()] = S.today.n;
@@ -620,7 +622,7 @@ function renderHome(){
     box.appendChild(b);
   });
 
-  if(S.today.d !== today()){ S.today = {d: today(), n: 0, sec: 0}; save(); }
+  if(S.today.d !== today()){ S.today = freshToday(); save(); }
 
   const st = lvSt(S.lv), L = DATA[S.lv], g = goalOf(S.lv, st.pass);
   const list = planList(S.lv).filter(k=>!st.done[k]);
@@ -668,6 +670,13 @@ function renderHome(){
   const fs = firstStat(S.lv);
   document.getElementById("pfirst").textContent =
       fs ? `${fs.rate}%（${fs.okN}/${fs.allN}）` : "还没有记录";
+  // 今日首答：本级那个是历史累积，家长想看的是"今天这一轮做得怎么样"
+  const tf = (S.today && S.today.d === today()) ? (S.today.fa || 0) : 0;
+  const to = (S.today && S.today.d === today()) ? (S.today.fo || 0) : 0;
+  const ptf = document.getElementById("ptodayfirst");
+  if(ptf) ptf.textContent = tf
+      ? Math.round(to / tf * 100) + "%（" + to + "/" + tf + "）"
+      : "今天还没有首答";
 
   const rb = document.getElementById("rounds"); rb.innerHTML = "";
   for(let k=1;k<=10;k++){
@@ -728,10 +737,17 @@ function calcStreak(){
  * 视图偏好只存运行时，不写进存档，旧存档天然兼容。 */
 const MAP_WEEKS = 12;
 let mapView = "month";
-/** 做题数 → 色阶：1-5 / 6-15 / 16-30 / 31+ 题。阈值按每日 5–15 分钟定，待真实数据校准 */
+/** 做题数 → 色阶：1-5 / 6-15 / 16-30 / 31-100 / 101-200 / 200+ 题。
+ *  以前 31 题就封顶，一天做 31 题和做 200 题颜色一样，看不出强度差异。 */
 function heatLevel(n){
   n = +n || 0;
-  return n === 0 ? 0 : (n <= 5 ? 1 : (n <= 15 ? 2 : (n <= 30 ? 3 : 4)));
+  if(n === 0) return 0;
+  if(n <= 5) return 1;
+  if(n <= 15) return 2;
+  if(n <= 30) return 3;
+  if(n <= 100) return 4;
+  if(n <= 200) return 5;
+  return 6;
 }
 function calCell(key, label, hist, tk){
   const n = +(hist[key] || 0);
@@ -1016,7 +1032,7 @@ function applyPortable(o){
   }
   // 今天已练时间/题数：只认同一天的码，按 max 合并 —— 换设备能接着倒计时，重复扫码也不会虚增
   if(Array.isArray(o.t) && o.t[0] === today()){
-    if(!S.today || S.today.d !== today()) S.today = {d: today(), n:0, sec:0};
+    if(!S.today || S.today.d !== today()) S.today = freshToday();
     S.today.n   = Math.max((+S.today.n || 0), (+o.t[1] || 0));
     S.today.sec = Math.max((+S.today.sec || 0), (+o.t[2] || 0));
   }
@@ -1638,7 +1654,7 @@ function validSess(){
 }
 
 function endSession(){
-  if(S.today.d !== today()) S.today = {d: today(), n: 0, sec: 0};
+  if(S.today.d !== today()) S.today = freshToday();
   if(sessSec > 0){ S.today.sec = (S.today.sec || 0) + sessSec; sessSec = 0; }
   secCarry = 0;
   save();
@@ -2086,7 +2102,14 @@ function onTap(e){
   if(!firstJudged && alive.length && alive[0].length){
     firstJudged = true;
     const rec = qRec(S.lv, curIdx);
-    if(rec[0] === null){ rec[0] = hit ? 1 : 0; rec[2] = Date.now() - t0; save(); }
+    if(rec[0] === null){
+      rec[0] = hit ? 1 : 0; rec[2] = Date.now() - t0;
+      // 今日首答：只在这道题第一次被作答时计一次，重做不再算首答
+      if(!S.today || S.today.d !== today()) S.today = freshToday();
+      S.today.fa = (S.today.fa || 0) + 1;
+      if(hit) S.today.fo = (S.today.fo || 0) + 1;
+      save();
+    }
   }
 
   if(hit){
@@ -2212,7 +2235,7 @@ document.getElementById("resetToday").onclick = ()=>{
   const sec = (S.today && S.today.sec) || 0, n = (S.today && S.today.n) || 0;
   if(!sec && !n){ alert("今天还没有记录，不用重置"); return; }
   if(!confirm("把今天的 " + Math.round(sec/60) + " 分钟、 " + n + " 题清零？\n（活跃地图里今天那格也会清空；做到第几轮不受影响）")) return;
-  S.today = {d: today(), n: 0, sec: 0};
+  S.today = freshToday();
   if(S.history) delete S.history[today()];
   S.sess = null;
   running = false; remaining = 0;

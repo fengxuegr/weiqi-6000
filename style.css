@@ -39,11 +39,14 @@
   --danger:#a85846; --danger-bg:#fdf6f3; --danger-line:#e2c6bd;
 
   /* ---- 热力色阶：5 档，相邻亮度比 1.31 / 1.39 / 1.36 / 1.70 ---- */
+  /* 六级色阶：原来 31 题以上就封顶，31 题和 200 题看着一模一样，跨度太窄 */
   --heat0:#efe9dd; --heat0-ink:#6f6353;
-  --heat1:#e8cba0; --heat1-ink:#5c4322;
-  --heat2:#d8a86b; --heat2-ink:#3d2911;
-  --heat3:#c68b45; --heat3-ink:#2b2118;
-  --heat4:#a35f28; --heat4-ink:#ffffff;
+  --heat1:#f0dcc0; --heat1-ink:#5c4322;
+  --heat2:#e2c08f; --heat2-ink:#4a3418;
+  --heat3:#ce9a55; --heat3-ink:#3d2911;
+  --heat4:#a1661f; --heat4-ink:#ffffff;
+  --heat5:#8a4f16; --heat5-ink:#ffffff;
+  --heat6:#5e3110; --heat6-ink:#ffffff;
 
   /* ---- 圆角：只保留 4 档 ---- */
   --r-sm:8px; --r-md:10px; --r-lg:14px; --r-pill:999px;
@@ -256,6 +259,8 @@ input[type=number]{width:84px;font-family:inherit;font-size:15px;padding:8px;
 .cell.lv2{background:var(--heat2);color:var(--heat2-ink)}
 .cell.lv3{background:var(--heat3);color:var(--heat3-ink)}
 .cell.lv4{background:var(--heat4);color:var(--heat4-ink)}
+.cell.lv5{background:var(--heat5);color:var(--heat5-ink)}
+.cell.lv6{background:var(--heat6);color:var(--heat6-ink)}
 /* 未来日：透明 + 虚线，与实心浅底「未做」明确区分 */
 .cell.fut{background:transparent;border:1px dashed var(--line-2);color:var(--ink-4)}
 /* 近 12 周视图：84 格，7 列 × 12 行，压缩行高，题数交给色阶与「本月」下钻 */
@@ -264,17 +269,19 @@ input[type=number]{width:84px;font-family:inherit;font-size:15px;padding:8px;
 .cal.rolling .cell span{font-size:var(--fs-xs)}
 .cal.rolling .cell em{display:none}
 .cell.cur{box-shadow:inset 0 0 0 2px var(--brand)}
-.cell.lv3.cur,.cell.lv4.cur{box-shadow:inset 0 0 0 2px var(--ink-1)}
+.cell.lv3.cur,.cell.lv4.cur,.cell.lv5.cur,.cell.lv6.cur{box-shadow:inset 0 0 0 2px var(--ink-1)}
 /* 今天未做时也要能定位 */
 .cell.lv0.cur{box-shadow:inset 0 0 0 2px var(--brand)}
 
-.legend{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-4)}
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:5px 6px;font-size:11px;color:var(--ink-4)}
 .legend i{width:18px;height:12px;border-radius:3px;display:inline-block}
 .legend i.lv0{background:var(--heat0)}
 .legend i.lv1{background:var(--heat1)}
 .legend i.lv2{background:var(--heat2)}
 .legend i.lv3{background:var(--heat3)}
 .legend i.lv4{background:var(--heat4)}
+.legend i.lv5{background:var(--heat5)}
+.legend i.lv6{background:var(--heat6)}
 
 /* ---------- 移动端 / 添加到主屏幕 ---------- */
 html{overscroll-behavior:none;-webkit-text-size-adjust:100%}
