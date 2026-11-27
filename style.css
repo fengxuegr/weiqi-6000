@@ -437,8 +437,20 @@ input[type=range]{width:96px;accent-color:var(--brand);vertical-align:middle;hei
 .qrHint{font-size:12px;color:var(--ink-4);text-align:center;margin-bottom:8px}
 
 /* ---------- 错题集 ---------- */
+/* 错题集独立成卡（原来塞在「每日节奏」最底部，家长找不到入口）：
+   卡片标题行右侧挂一个徽标按钮，有错题时实心红、0 道时灰色描边 */
+.wronghome h2{display:flex;align-items:center}
+.wronghome .h2no{margin-right:6px}
+.wrongN{margin-left:auto;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-4);
+  font-family:inherit;font-size:var(--fs-sm);font-weight:700;padding:7px 14px;border-radius:999px;
+  cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
+.wrongN::after{content:" ▾";opacity:.7;font-weight:400}
+.wrongN.has{border-color:var(--no);background:var(--no);color:var(--surface)}
+.wrongN:active{transform:translateY(1px)}
+.wrongHint{margin:0}
 .wrongList{margin:6px 0 4px;border:1px solid var(--line);border-radius:var(--r-sm);
            background:var(--surface);overflow:hidden}
+.wrongList:not(.hide){margin-top:10px}
 .wrongList .emptyLine{padding:12px;font-size:var(--fs-xs);color:var(--ink-4);text-align:center}
 .wrow{display:flex;gap:8px;padding:10px;font-size:var(--fs-sm);
       border-bottom:1px solid var(--track);color:var(--ink-2)}

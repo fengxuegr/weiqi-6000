@@ -66,8 +66,14 @@
     <button class="btn hide" id="nextpass">进入下一轮</button>
   </div>
 
+  <div class="card wronghome">
+    <h2><span class="h2no">3</span><span id="wrongTitle">错题集</span><button class="wrongN" id="wrongBtn" type="button">0 道</button></h2>
+    <div class="hint wrongHint">做错、或看过答案的题会收在这里；重练时整题一次走对就能移出</div>
+    <div class="wrongList hide" id="wrongList"></div>
+  </div>
+
   <div class="card">
-    <h2>3 活跃地图</h2>
+    <h2>4 活跃地图</h2>
     <div class="row"><span>看多久</span>
       <span class="seg"><button id="vRolling">近 12 周</button><button id="vMonth" class="on">本月</button></span></div>
     <div class="row"><span>连续做题 · 跨月滚动</span><span id="streak">连续 0 天</span></div>
@@ -85,7 +91,7 @@
   </div>
 
   <div class="card">
-    <h2>4 每日节奏</h2>
+    <h2>5 每日节奏</h2>
     <div class="row"><span>今天按什么停</span>
       <span class="seg"><button id="mFree">自由</button><button id="mCount">固定题数</button><button id="mTime" class="on">固定时间</button></span></div>
     <div class="row" id="rowCount"><label for="numCount">每天题数</label>
@@ -105,9 +111,6 @@
         <input id="sfxVol" type="range" min="0" max="100" step="5" value="45" title="音量">
       </span></div>
     <div class="hint">iPad 侧边静音键打开时不会响</div>
-    <div class="row" style="margin-top:12px"><span id="wrongTitle">错题集</span>
-      <button class="chip" id="wrongBtn">0 道</button></div>
-    <div class="wrongList hide" id="wrongList"></div>
 
     <details class="fold">
       <summary>备份 · 换设备</summary>
@@ -206,7 +209,7 @@
   </div>
 </div>
 
-<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">0167912d1ed9</span><br><button class="chk" id="checkUpdate">检查更新</button></div>
+<div class="foot">数据来自本机题库文件，仅供自家教学练习使用 · <span class="ver">06f053e35e6f</span><br><button class="chk" id="checkUpdate">检查更新</button></div>
 </div>
 
 <!--PWA-UPDATE-->

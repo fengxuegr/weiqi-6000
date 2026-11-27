@@ -1134,7 +1134,11 @@ window.GOTEST = { makePortable, applyPortable, encodeCode, decodeCode, importFro
 function renderWrong(){
   const idxs = wrongOf(S.lv);
   const btn = document.getElementById("wrongBtn");
-  if(btn) btn.textContent = idxs.length + " 道";
+  if(btn){
+    btn.textContent = idxs.length + " 道";
+    // 有错题时徽标变实心红（首页一眼能看出"还有 N 道没清"），0 道时退回灰色描边
+    btn.classList.toggle("has", idxs.length > 0);
+  }
   // 错题是按「档」分开放的（题目编号只在档内唯一），标题必须写明是哪一档，
   // 否则很容易误以为是全部级别的错题。
   const title = document.getElementById("wrongTitle");
